@@ -1,0 +1,5 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": { "outDir": "dist", "rootDir": ".", "types": ["node"], "module": "NodeNext", "moduleResolution": "NodeNext" },
+  "include": ["src", "tests", "drizzle.config.ts", "vitest.config.ts"]
+}

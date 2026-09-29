@@ -1,0 +1,34 @@
+import { z } from "zod";
+
+const bool = z.enum(["true", "false", "1", "0"]).transform((v) => v === "true" || v === "1");
+
+const envSchema = z.object({
+  NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+  PORT: z.coerce.number().int().positive().default(4000),
+  APP_URL: z.string().url().default("http://localhost:5173"),
+  CORS_ORIGINS: z.string().default(""),
+  TRUST_PROXY: z.coerce.number().int().min(0).default(0),
+  DATABASE_URL: z.string().url(),
+  SESSION_TTL_DAYS: z.coerce.number().int().min(1).max(365).default(30),
+  EMAIL_PROVIDER: z.enum(["console", "memory"]).default("console"),
+  EMAIL_FROM: z.string().default("Household <no-reply@example.com>"),
+  RATE_LIMIT_AUTH_MAX: z.coerce.number().int().positive().default(10),
+  RATE_LIMIT_GLOBAL_MAX: z.coerce.number().int().positive().default(300),
+  LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
+  LOG_PRETTY: bool.optional(),
+});
+
+export type Env = z.infer<typeof envSchema>;
+
+export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
+  const parsed = envSchema.safeParse(source);
+  if (!parsed.success) {
+    const issues = parsed.error.issues.map((i) => `  ${i.path.join(".")}: ${i.message}`).join("\n");
+    throw new Error(`Invalid environment configuration:\n${issues}`);
+  }
+  return parsed.data;
+}
+
+export function allowedOrigins(env: Env): string[] {
+  return [env.APP_URL, ...env.CORS_ORIGINS.split(",").map((s) => s.trim()).filter(Boolean)].map((o) => new URL(o).origin);
+}

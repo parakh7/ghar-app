@@ -1,0 +1,36 @@
+{
+  "name": "household-app",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Mobile-first household management for Indian homes — househelps, attendance, checklists, salaries, bills and reminders.",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=20.11"
+  },
+  "scripts": {
+    "dev": "npm run dev --workspace @household/api & npm run dev --workspace @household/web",
+    "dev:api": "npm run dev --workspace @household/api",
+    "dev:web": "npm run dev --workspace @household/web",
+    "build": "npm run build --workspace @household/shared && npm run build --workspace @household/api && npm run build --workspace @household/web",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "eslint .",
+    "test": "npm run test --workspaces --if-present",
+    "db:generate": "npm run db:generate --workspace @household/api",
+    "db:migrate": "npm run db:migrate --workspace @household/api",
+    "db:seed": "npm run db:seed --workspace @household/api",
+    "test:e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.0",
+    "@playwright/test": "^1.56.0",
+    "eslint": "^10.11.0",
+    "eslint-plugin-react-hooks": "^7.0.0",
+    "globals": "^16.0.0",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.71.0"
+  },
+  "type": "module"
+}
