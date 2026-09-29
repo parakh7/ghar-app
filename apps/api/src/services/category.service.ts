@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import type { CategoryDTO } from "@household/shared";
 import { househelpCategories } from "../db/schema.js";
 import type { DbOrTx } from "../db/client.js";
@@ -26,11 +26,14 @@ export async function listCategories(db: DbOrTx, householdId: string): Promise<C
 export async function createCategory(deps: Deps, actorUserId: string, householdId: string, input: { name: string }, ip?: string): Promise<CategoryDTO> {
   try {
     const category = await deps.db.transaction(async (tx) => {
-      const [{ maxSort } = { maxSort: -1 }] = await tx
-        .select({ maxSort: sql<number>`coalesce(max(${househelpCategories.sortOrder}), -1)` })
-        .from(househelpCategories)
-        .where(eq(househelpCategories.householdId, householdId));
-      const [row] = await tx.insert(househelpCategories).values({ householdId, name: input.name, sortOrder: Number(maxSort) + 1 }).returning();
+      // Locks every category row in the household for the duration of the insert — Postgres rejects
+      // FOR UPDATE combined with an aggregate, so the max is computed in JS from the locked rows
+      // (same pattern as moveCategory's locked ordered read, and countActiveOwners in member.service.ts).
+      const existing = await tx.select({ sortOrder: househelpCategories.sortOrder }).from(househelpCategories)
+        .where(eq(househelpCategories.householdId, householdId))
+        .for("update");
+      const maxSort = existing.reduce((max, r) => Math.max(max, r.sortOrder), -1);
+      const [row] = await tx.insert(househelpCategories).values({ householdId, name: input.name, sortOrder: maxSort + 1 }).returning();
       await recordAudit(tx, { householdId, actorUserId, action: "category.created", entityType: "househelp_category", entityId: row!.id, newValue: { name: input.name }, ipAddress: ip ?? null });
       return row!;
     });
