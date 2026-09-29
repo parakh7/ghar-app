@@ -3,20 +3,20 @@
   --font: "Atkinson Hyperlegible Next", "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 
   /* palette */
-  --neem-900: #12301F;
-  --neem-700: #1F4D3A;   /* primary */
-  --neem-600: #2A6149;
-  --neem-100: #DCE8E1;
-  --neem-50:  #EEF4F0;
-  --haldi-500: #E3A21A;  /* reserved for "today" */
-  --haldi-100: #FBEFD2;
-  --paper: #F5F6F3;
+  --accent-900: #7A2708;
+  --accent-700: #C2410C;   /* primary */
+  --accent-600: #D6551F;
+  --accent-100: #F5DDD0;
+  --accent-50:  #FBEEE6;
+  --today-500: #B8790C;  /* reserved for "today" */
+  --today-100: #F6E6C6;
+  --paper: #FAF7F2;
   --surface: #FFFFFF;
-  --ink: #17201C;
-  --ink-2: #4F5C55;
-  --ink-3: #6E7A73;
-  --line: #DCE1DD;
-  --line-strong: #BFC7C2;
+  --ink: #2D2A26;
+  --ink-2: #5C554C;
+  --ink-3: #8A7F70;
+  --line: #E8E1D6;
+  --line-strong: #D8CFC0;
 
   /* status — always paired with an icon or word, never colour alone */
   --overdue: #B3261E;  --overdue-bg: #FBE9E7;
@@ -41,11 +41,11 @@
   --radius-lg: 22px;  /* sheets */
   --touch: 48px;      /* ≥44px minimum target */
 
-  --shadow-sheet: 0 -8px 32px rgba(18, 48, 31, 0.14);
+  --shadow-sheet: 0 -8px 32px rgba(45, 42, 26, 0.14);
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
   --dur: 180ms;
 
-  --focus: 0 0 0 3px var(--paper), 0 0 0 5px var(--neem-600);
+  --focus: 0 0 0 3px var(--paper), 0 0 0 5px var(--accent-600);
 
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -56,20 +56,20 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --neem-700: #7CC4A0;
-    --neem-600: #93D3B2;
-    --neem-900: #C9EBD9;
-    --neem-100: #1E3A2D;
-    --neem-50: #16271F;
-    --haldi-500: #F0B940;
-    --haldi-100: #3A2E12;
-    --paper: #0F1A15;
-    --surface: #17241E;
-    --ink: #E7EEEA;
-    --ink-2: #B3C0B8;
-    --ink-3: #8C9A92;
-    --line: #2A3A32;
-    --line-strong: #3C4E45;
+    --accent-700: #E68A5C;
+    --accent-600: #EF9B70;
+    --accent-900: #F5CDB5;
+    --accent-100: #3D2A1F;
+    --accent-50: #2E211A;
+    --today-500: #D9A441;
+    --today-100: #3D3016;
+    --paper: #1C1815;
+    --surface: #241F1A;
+    --ink: #F3EDE4;
+    --ink-2: #C9BFB2;
+    --ink-3: #A69C8E;
+    --line: #3A332C;
+    --line-strong: #4E463C;
     --overdue: #FF8A80;  --overdue-bg: #3A1714;
     --due-soon: #FFC266; --due-soon-bg: #3A2A10;
     --ok: #7FD6A0;       --ok-bg: #133222;

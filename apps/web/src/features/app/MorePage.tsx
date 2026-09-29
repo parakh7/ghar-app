@@ -38,7 +38,7 @@ export function MorePage() {
               <span className="list__label" style={{ display: "block" }}>{h.name}</span>
               <span className="list__meta">{ROLE_LABEL[h.role]} · {h.memberCount} {h.memberCount === 1 ? "member" : "members"}</span>
             </span>
-            {h.id === household?.id && <Check size={22} aria-hidden color="var(--neem-700)" />}
+            {h.id === household?.id && <Check size={22} aria-hidden color="var(--accent-700)" />}
           </button>
         ))}
       </div>
