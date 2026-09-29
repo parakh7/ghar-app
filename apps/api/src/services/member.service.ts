@@ -1,4 +1,4 @@
-import { and, asc, count, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import type { HouseholdRole, MemberDTO, UpdateMemberInput } from "@household/shared";
 import { householdMembers, users } from "../db/schema.js";
 import type { DbOrTx } from "../db/client.js";
@@ -33,11 +33,18 @@ async function getMemberDTO(db: DbOrTx, householdId: string, userId: string): Pr
   return row ? toMemberDTO(row) : undefined;
 }
 
-/** Counts ACTIVE owners. Pass a transaction and lock the target row first so this can't race a concurrent demotion/removal. */
+/**
+ * Counts ACTIVE owners, locking every ACTIVE-owner row so a concurrent transaction trying to
+ * demote/remove/leave a *different* owner row in the same household blocks until this one commits
+ * or rolls back — otherwise two concurrent requests could each lock a different owner row, each
+ * see the old (pre-change) count, and both pass the "at least one owner" check, leaving zero owners.
+ * (Postgres rejects FOR UPDATE combined with an aggregate, so this selects rows and counts in JS.)
+ */
 async function countActiveOwners(tx: DbOrTx, householdId: string): Promise<number> {
-  const [row] = await tx.select({ n: count() }).from(householdMembers)
-    .where(and(eq(householdMembers.householdId, householdId), eq(householdMembers.role, "OWNER"), eq(householdMembers.status, "ACTIVE")));
-  return Number(row?.n ?? 0);
+  const rows = await tx.select({ userId: householdMembers.userId }).from(householdMembers)
+    .where(and(eq(householdMembers.householdId, householdId), eq(householdMembers.role, "OWNER"), eq(householdMembers.status, "ACTIVE")))
+    .for("update");
+  return rows.length;
 }
 
 const LAST_OWNER_ERROR = "A household needs at least one owner.";
