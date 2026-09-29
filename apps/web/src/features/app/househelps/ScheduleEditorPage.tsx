@@ -30,13 +30,17 @@ export function ScheduleEditorPage() {
   const [weekdays, setWeekdays] = useState<number[]>([]);
   const [startTime, setStartTime] = useState("");
   const [endTime, setEndTime] = useState("");
-  const [loadedData, setLoadedData] = useState(scheduleQuery.data);
+  const [seeded, setSeeded] = useState(false);
 
-  // Seed form state from the loaded schedule once, the first render after it arrives.
-  // Updating state during render (guarded by the loadedData !== data check) rather than in a
-  // useEffect avoids an extra commit-and-rerender pass for this one-time initialization.
-  if (scheduleQuery.data && scheduleQuery.data !== loadedData) {
-    setLoadedData(scheduleQuery.data);
+  // Seed form state from the loaded schedule once. The tracker starts at a constant (`false`),
+  // never at the query value itself — if the cache is already warm at mount (the normal
+  // navigation path: save a schedule, go back, reopen the editor), `scheduleQuery.data` is
+  // populated on the very first render, and a tracker initialized from that same value would
+  // equal it immediately, so the seeding block would never run and the form would render blank.
+  // Updating state during render (guarded by `!seeded`) rather than in a useEffect avoids an
+  // extra commit-and-rerender pass for this one-time initialization.
+  if (scheduleQuery.data && !seeded) {
+    setSeeded(true);
     setWeekdays(scheduleQuery.data.weekdays);
     setStartTime(scheduleQuery.data.startTime ?? "");
     setEndTime(scheduleQuery.data.endTime ?? "");

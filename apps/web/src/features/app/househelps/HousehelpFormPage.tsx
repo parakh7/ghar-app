@@ -44,14 +44,18 @@ export function HousehelpFormPage({ mode }: { mode: "create" | "edit" }) {
     monthlySalaryPaise: "", dailyRatePaise: "", halfDayRatePaise: "", salaryDueDay: "1", notes: "",
   });
   const [categoryIds, setCategoryIds] = useState<string[]>([]);
-  const [loadedExisting, setLoadedExisting] = useState(existing.data);
+  const [seeded, setSeeded] = useState(false);
 
-  // Seed form state from the loaded househelp once, the first render after it arrives.
-  // Updating state during render (guarded by the loadedExisting !== data check) rather than in a
-  // useEffect avoids an extra commit-and-rerender pass for this one-time initialization.
-  if (mode === "edit" && existing.data && existing.data !== loadedExisting) {
+  // Seed form state from the loaded househelp once. The tracker starts at a constant (`false`),
+  // never at the query value itself — if the cache is already warm at mount (the normal
+  // navigation path: open the detail page, click "Edit details"), `existing.data` is populated
+  // on the very first render, and a tracker initialized from that same value would equal it
+  // immediately, so the seeding block would never run and the form would render blank.
+  // Updating state during render (guarded by `!seeded`) rather than in a useEffect avoids an
+  // extra commit-and-rerender pass for this one-time initialization.
+  if (mode === "edit" && existing.data && !seeded) {
     const h = existing.data;
-    setLoadedExisting(h);
+    setSeeded(true);
     setForm({
       name: h.name, phone: h.phone ?? "", roleTitle: h.roleTitle ?? "", salaryMode: h.salaryMode,
       monthlySalaryPaise: paiseToInput(h.monthlySalaryPaise), dailyRatePaise: paiseToInput(h.dailyRatePaise), halfDayRatePaise: paiseToInput(h.halfDayRatePaise),
