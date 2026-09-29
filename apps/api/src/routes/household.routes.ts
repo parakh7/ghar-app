@@ -2,6 +2,7 @@ import { Router } from "express";
 import { createHouseholdSchema, inviteMemberSchema, updateHouseholdSchema, updateMemberSchema } from "@household/shared";
 import { requireAuth } from "../middleware/auth.js";
 import { requireHousehold } from "../middleware/household.js";
+import { inviteLimiter } from "../middleware/rate-limit.js";
 import { parseBody } from "../middleware/validate.js";
 import { ok } from "../lib/respond.js";
 import type { Deps } from "../services/deps.js";
@@ -15,6 +16,7 @@ import * as members from "../services/member.service.js";
 export function householdRoutes(deps: Deps): Router {
   const r = Router();
   r.use(requireAuth);
+  const limiter = inviteLimiter(deps.env.RATE_LIMIT_AUTH_MAX);
 
   r.get("/", async (req, res) => {
     ok(res, await households.listHouseholdsForUser(deps.db, req.auth!.user.id));
@@ -59,7 +61,7 @@ export function householdRoutes(deps: Deps): Router {
     ok(res, await members.listInvites(deps, req.membership!.householdId));
   });
 
-  r.post("/:householdId/invites", requireHousehold(deps, "members.manage"), async (req, res) => {
+  r.post("/:householdId/invites", requireHousehold(deps, "members.manage"), limiter, async (req, res) => {
     const input = parseBody(req, inviteMemberSchema);
     ok(res, await members.createInvite(deps, req.auth!.user.id, req.membership!, input, req.ip), 201, "Invite sent.");
   });
@@ -69,7 +71,7 @@ export function householdRoutes(deps: Deps): Router {
     ok(res, null, 200, "Invite revoked.");
   });
 
-  r.post("/:householdId/invites/:inviteId/resend", requireHousehold(deps, "members.manage"), async (req, res) => {
+  r.post("/:householdId/invites/:inviteId/resend", requireHousehold(deps, "members.manage"), limiter, async (req, res) => {
     ok(res, await members.resendInvite(deps, req.auth!.user.id, req.membership!, req.params.inviteId as string, req.ip), 200, "Invite resent.");
   });
 

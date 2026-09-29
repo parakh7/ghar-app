@@ -18,8 +18,8 @@ export function RequireAuth({ children, needsHousehold = true }: { children: Rea
 }
 
 /** Only same-app paths are honoured, so `from` can never become an open redirect. */
-export function safeReturnPath(from: unknown): string {
-  return typeof from === "string" && from.startsWith("/") && !from.startsWith("//") ? from : "/";
+export function safeReturnPath(from: unknown, fallback = "/"): string {
+  return typeof from === "string" && from.startsWith("/") && !from.startsWith("//") ? from : fallback;
 }
 
 export function RedirectIfSignedIn({ children }: { children: ReactNode }) {

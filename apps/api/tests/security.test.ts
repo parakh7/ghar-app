@@ -78,4 +78,15 @@ describe("rate limiting", () => {
     const other = await limited.request.post("/api/auth/login").set(csrf).send({ email: "someone-else@example.com", password: "guess guess" });
     expect(other.status).toBe(401);
   });
+
+  it("throttles invite creation and resend so they can't be used to email-bomb strangers", async () => {
+    const owner = await signupUser(limited);
+    const created = await limited.request.post("/api/households").set(csrf).set("cookie", owner.cookie).send({ name: "Rate Limited Home" });
+    const householdId = created.body.data.id as string;
+    const attempt = (n: number) => limited.request.post(`/api/households/${householdId}/invites`).set(csrf).set("cookie", owner.cookie).send({ email: `invitee${n}@example.com`, role: "MEMBER" });
+    for (let i = 0; i < 3; i++) expect((await attempt(i)).status).toBe(201);
+    const blocked = await attempt(3);
+    expect(blocked.status).toBe(429);
+    expect(blocked.body.error.code).toBe("RATE_LIMITED");
+  });
 });

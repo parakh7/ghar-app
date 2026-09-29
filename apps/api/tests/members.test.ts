@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { auditLogs, householdInvites, householdMembers } from "../src/db/schema.js";
+import { auditLogs, householdInvites, householdMembers, households } from "../src/db/schema.js";
 import { createTestContext, csrf, DAY, signupUser, tokenFromLink, truncateAll, type TestContext } from "./helpers.js";
 
 const ctx = createTestContext();
@@ -108,6 +108,27 @@ describe("listing and managing members", () => {
     await createHousehold(ctx, alice.cookie, "A");
     const b = await createHousehold(ctx, bob.cookie, "B");
     expect((await ctx.request.get(`/api/households/${b.id}/members`).set("cookie", alice.cookie)).status).toBe(404);
+  });
+
+  it("a non-OWNER with members.manage cannot promote anyone (including themselves) to OWNER", async () => {
+    const owner = await signupUser(ctx);
+    const admin = await signupUser(ctx);
+    const member = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    await addMember(h.id, admin.id, "ADMIN");
+    await addMember(h.id, member.id, "MEMBER");
+    // grant this household's ADMIN role members.manage via a per-household override
+    await ctx.db.update(households).set({ rolePermissionOverrides: { ADMIN: { grant: ["members.manage"] } } }).where(eq(households.id, h.id));
+
+    // sanity check: the override actually took effect for ordinary management
+    const renamed = await ctx.request.patch(`/api/households/${h.id}/members/${member.id}`).set(csrf).set("cookie", admin.cookie).send({ displayName: "Bud" });
+    expect(renamed.status).toBe(200);
+
+    const selfPromote = await ctx.request.patch(`/api/households/${h.id}/members/${admin.id}`).set(csrf).set("cookie", admin.cookie).send({ role: "OWNER" });
+    expect(selfPromote.status).toBe(403);
+
+    const promoteOther = await ctx.request.patch(`/api/households/${h.id}/members/${member.id}`).set(csrf).set("cookie", admin.cookie).send({ role: "OWNER" });
+    expect(promoteOther.status).toBe(403);
   });
 });
 
@@ -225,5 +246,47 @@ describe("invites", () => {
     const b = await createHousehold(ctx, bob.cookie, "B");
     const res = await ctx.request.post(`/api/households/${b.id}/invites`).set(csrf).set("cookie", alice.cookie).send({ email: "x@example.com", role: "MEMBER" });
     expect(res.status).toBe(404);
+  });
+
+  it("accepting an invite does not demote a member who is already ACTIVE (e.g. already promoted to OWNER)", async () => {
+    const owner = await signupUser(ctx);
+    const invitee = await signupUser(ctx, { email: "already-active@example.com" });
+    const h = await createHousehold(ctx, owner.cookie);
+    await ctx.request.post(`/api/households/${h.id}/invites`).set(csrf).set("cookie", owner.cookie).send({ email: "already-active@example.com", role: "MEMBER" });
+    const token = tokenFromLink(ctx.email.last("household-invite")!.text);
+    // The invitee becomes an ACTIVE OWNER through some other path (e.g. accepted a household-B
+    // invite that added them, then got promoted here) before ever using this still-valid invite.
+    await addMember(h.id, invitee.id, "OWNER");
+
+    const accept = await ctx.request.post("/api/invites/accept").set(csrf).set("cookie", invitee.cookie).send({ token });
+    expect(accept.status).toBe(200);
+
+    const list = await ctx.request.get(`/api/households/${h.id}/members`).set("cookie", owner.cookie);
+    expect(list.body.data.find((m: { email: string }) => m.email === "already-active@example.com").role).toBe("OWNER");
+  });
+
+  it("lets a previously-removed member rejoin (at the invite's role) by accepting a fresh invite", async () => {
+    const owner = await signupUser(ctx);
+    const member = await signupUser(ctx, { email: "rejoin@example.com" });
+    const h = await createHousehold(ctx, owner.cookie);
+    await addMember(h.id, member.id, "MEMBER");
+    await ctx.request.delete(`/api/households/${h.id}/members/${member.id}`).set(csrf).set("cookie", owner.cookie);
+
+    await ctx.request.post(`/api/households/${h.id}/invites`).set(csrf).set("cookie", owner.cookie).send({ email: "rejoin@example.com", role: "ADMIN" });
+    const token = tokenFromLink(ctx.email.last("household-invite")!.text);
+    const accept = await ctx.request.post("/api/invites/accept").set(csrf).set("cookie", member.cookie).send({ token });
+    expect(accept.status).toBe(200);
+
+    const list = await ctx.request.get(`/api/households/${h.id}/members`).set("cookie", owner.cookie);
+    expect(list.body.data.find((m: { email: string }) => m.email === "rejoin@example.com").role).toBe("ADMIN");
+  });
+
+  it("invite links no longer carry a dead &email= query param", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    await ctx.request.post(`/api/households/${h.id}/invites`).set(csrf).set("cookie", owner.cookie).send({ email: "linkcheck@example.com", role: "MEMBER" });
+    const text = ctx.email.last("household-invite")!.text;
+    expect(text).toContain("/invites/accept?token=");
+    expect(text).not.toContain("email=");
   });
 });

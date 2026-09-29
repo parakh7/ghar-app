@@ -16,9 +16,9 @@ export function AcceptInvitePage() {
 
   const mutation = useMutation({
     mutationFn: () => post<HouseholdDTO>("/invites/accept", { token }),
-    onSuccess: ({ data }) => {
-      qc.invalidateQueries({ queryKey: meKey });
+    onSuccess: async ({ data }) => {
       setActiveHouseholdId(data.id);
+      await qc.invalidateQueries({ queryKey: meKey });
       navigate("/", { replace: true });
     },
   });

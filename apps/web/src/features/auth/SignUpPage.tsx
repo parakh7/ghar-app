@@ -6,6 +6,7 @@ import { post } from "../../lib/api";
 import { Alert } from "../../components/Alert";
 import { Button } from "../../components/Button";
 import { TextField } from "../../components/TextField";
+import { safeReturnPath } from "../app/guards";
 import { AuthLayout } from "./AuthLayout";
 import { meKey } from "./session";
 import { useFormErrors } from "./useFormErrors";
@@ -23,8 +24,7 @@ export function SignUpPage() {
     onSuccess: ({ data }) => {
       qc.setQueryData(meKey, data);
       const from = (location.state as { from?: unknown } | null)?.from;
-      const safe = typeof from === "string" && from.startsWith("/") && !from.startsWith("//");
-      navigate(safe ? (from as string) : "/onboarding", { replace: true });
+      navigate(safeReturnPath(from, "/onboarding"), { replace: true });
     },
     onError: errors.fromError,
   });

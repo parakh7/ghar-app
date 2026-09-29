@@ -76,7 +76,10 @@ export function MembersPage() {
                 </select>
                 <Button
                   variant="ghost" icon={<UserMinus size={20} aria-hidden />} aria-label={`Remove ${m.name}`}
-                  onClick={() => removeMember.mutate(m.userId, { onError: (err) => setPageError(messageFrom(err)) })}
+                  onClick={() => {
+                    if (!window.confirm(`Remove ${m.name} from the household?`)) return;
+                    removeMember.mutate(m.userId, { onError: (err) => setPageError(messageFrom(err)) });
+                  }}
                 />
               </span>
             ) : (

@@ -1,11 +1,10 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useQueryClient } from "@tanstack/react-query";
 import { Check, LogOut, Plus } from "lucide-react";
 import { ApiError } from "../../lib/api";
 import { Alert } from "../../components/Alert";
 import { Button } from "../../components/Button";
-import { meKey, useSession, useSignOut } from "../auth/session";
+import { useSession, useSignOut } from "../auth/session";
 import { useLeaveHousehold } from "./members/useMembers";
 import { useActiveHousehold } from "./useActiveHousehold";
 
@@ -16,7 +15,6 @@ export function MorePage() {
   const { household, households, switchTo } = useActiveHousehold();
   const signOut = useSignOut();
   const navigate = useNavigate();
-  const qc = useQueryClient();
   const leaveHousehold = useLeaveHousehold(household?.id ?? "");
   const [leaveError, setLeaveError] = useState<string | null>(null);
 
@@ -24,7 +22,6 @@ export function MorePage() {
     if (!household) return;
     if (!window.confirm(`Leave ${household.name}? You'll need a new invite to rejoin.`)) return;
     leaveHousehold.mutate(undefined, {
-      onSuccess: () => qc.invalidateQueries({ queryKey: meKey }),
       onError: (err) => setLeaveError(err instanceof ApiError ? err.message : "Something went wrong."),
     });
   }

@@ -25,3 +25,17 @@ export function authLimiter(max: number): RequestHandler {
     handler: (_req, res) => fail(res, Errors.rateLimited()),
   });
 }
+
+/**
+ * Guards invite create/resend — both send email, so they need the same email-bomb protection as
+ * signup/password-reset. Keyed by IP + household (not email: resend has no email in its body,
+ * only an inviteId) so spamming one household's invites can't be dodged by rotating target emails,
+ * and doesn't lock out unrelated households behind the same IP/NAT.
+ */
+export function inviteLimiter(max: number): RequestHandler {
+  return rateLimit({
+    windowMs: 15 * 60_000, limit: max, standardHeaders: "draft-8", legacyHeaders: false,
+    keyGenerator: (req) => `${ipKeyGenerator(req.ip ?? "unknown")}|${req.params.householdId ?? ""}`,
+    handler: (_req, res) => fail(res, Errors.rateLimited()),
+  });
+}

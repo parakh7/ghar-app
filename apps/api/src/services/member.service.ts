@@ -54,6 +54,10 @@ const LAST_OWNER_ERROR = "A household needs at least one owner.";
 export async function updateMember(
   deps: Deps, actorUserId: string, membership: Membership, targetUserId: string, patch: UpdateMemberInput, ip?: string,
 ): Promise<MemberDTO> {
+  // Only an existing OWNER may mint another one — otherwise a non-OWNER with members.manage
+  // (e.g. an ADMIN granted it via role_permission_overrides) could promote themselves or anyone
+  // else to OWNER, a status that (per resolvePermissions) can never be revoked.
+  if (patch.role === "OWNER" && membership.role !== "OWNER") throw Errors.forbidden();
   await deps.db.transaction(async (tx) => {
     const [before] = await tx.select({ role: householdMembers.role, displayName: householdMembers.displayName })
       .from(householdMembers)
@@ -133,7 +137,7 @@ export async function createInvite(deps: Deps, actorUserId: string, membership: 
     await recordAudit(tx, { householdId: membership.householdId, actorUserId, action: "member.invited", entityType: "household_invite", entityId: row!.id, newValue: { email: input.email, role: input.role }, ipAddress: ip ?? null });
     return row!;
   });
-  const link = `${deps.env.APP_URL}/invites/accept?token=${encodeURIComponent(token)}&email=${encodeURIComponent(invite.email)}`;
+  const link = `${deps.env.APP_URL}/invites/accept?token=${encodeURIComponent(token)}`;
   deps.email.send(inviteMessage(invite.email, invite.role, membership.name, link))
     .catch((err: unknown) => deps.logger.error({ err, householdId: membership.householdId }, "invite email failed"));
   deps.logger.info({ householdId: membership.householdId, event: "member.invited" }, "member invited");
@@ -162,7 +166,7 @@ export async function resendInvite(deps: Deps, actorUserId: string, membership: 
     await recordAudit(tx, { householdId: membership.householdId, actorUserId, action: "member.invite_resent", entityType: "household_invite", entityId: inviteId, ipAddress: ip ?? null });
     return row;
   });
-  const link = `${deps.env.APP_URL}/invites/accept?token=${encodeURIComponent(token)}&email=${encodeURIComponent(invite.email)}`;
+  const link = `${deps.env.APP_URL}/invites/accept?token=${encodeURIComponent(token)}`;
   deps.email.send(inviteMessage(invite.email, invite.role, membership.name, link))
     .catch((err: unknown) => deps.logger.error({ err, householdId: membership.householdId }, "invite email failed"));
   return toInviteDTO(invite);
@@ -182,7 +186,11 @@ export async function acceptInvite(deps: Deps, user: { id: string; email: string
     const [existing] = await tx.select({ status: householdMembers.status }).from(householdMembers)
       .where(and(eq(householdMembers.householdId, invite.householdId), eq(householdMembers.userId, user.id)))
       .for("update");
-    if (existing) {
+    if (existing?.status === "ACTIVE") {
+      // Already an active member (e.g. re-accepting a second still-valid invite after being promoted).
+      // Don't let the invite's role silently overwrite whatever role they hold today.
+    } else if (existing) {
+      // Reactivating a previously-removed member — the invite's role applies fresh.
       await tx.update(householdMembers).set({ status: "ACTIVE", role: invite.role, joinedAt: now, invitedByUserId: invite.invitedByUserId })
         .where(and(eq(householdMembers.householdId, invite.householdId), eq(householdMembers.userId, user.id)));
     } else {
