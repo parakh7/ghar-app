@@ -18,17 +18,21 @@ function renderPage() {
   return render(<QueryClientProvider client={qc}><MemoryRouter><CategoriesPage /></MemoryRouter></QueryClientProvider>);
 }
 
+function mockFetch(permissions: string[]) {
+  return vi.spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (url.endsWith("/households/h1")) return jsonResponse({ success: true, data: { ...HOUSEHOLD, permissions }, message: null });
+    if (init?.method === "POST" && url.endsWith("/categories")) return jsonResponse({ success: true, data: { id: "c2", name: "Pet care", sortOrder: 1, isActive: true }, message: null });
+    if (url.endsWith("/categories")) return jsonResponse({ success: true, data: [{ id: "c1", name: "Cleaning", sortOrder: 0, isActive: true }], message: null });
+    throw new Error(`unexpected fetch ${url}`);
+  }) as typeof fetch);
+}
+
 describe("CategoriesPage", () => {
   beforeEach(() => { vi.restoreAllMocks(); });
 
   it("lists categories and posts a new one from the add form", async () => {
-    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      if (url.endsWith("/households/h1")) return jsonResponse({ success: true, data: { ...HOUSEHOLD, permissions: ["househelps.view", "categories.manage"] }, message: null });
-      if (init?.method === "POST" && url.endsWith("/categories")) return jsonResponse({ success: true, data: { id: "c2", name: "Pet care", sortOrder: 1, isActive: true }, message: null });
-      if (url.endsWith("/categories")) return jsonResponse({ success: true, data: [{ id: "c1", name: "Cleaning", sortOrder: 0, isActive: true }], message: null });
-      throw new Error(`unexpected fetch ${url}`);
-    }) as typeof fetch);
+    const fetchSpy = mockFetch(["househelps.view", "categories.manage"]);
     renderPage();
     expect(await screen.findByText("Cleaning")).toBeInTheDocument();
     await userEvent.type(screen.getByLabelText("Category name"), "Pet care");
@@ -36,5 +40,17 @@ describe("CategoriesPage", () => {
     const postCall = fetchSpy.mock.calls.find(([, init]) => (init as RequestInit | undefined)?.method === "POST");
     expect(postCall).toBeDefined();
     expect(JSON.parse((postCall![1] as RequestInit).body as string)).toEqual({ name: "Pet care" });
+  });
+
+  it("hides the add-category form and per-row controls for a viewer without categories.manage", async () => {
+    mockFetch(["househelps.view"]);
+    renderPage();
+    await screen.findByText("Cleaning");
+    expect(screen.queryByRole("button", { name: "Add category" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Category name")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Move Cleaning up" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Move Cleaning down" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Remove Cleaning" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Active" })).not.toBeInTheDocument();
   });
 });
