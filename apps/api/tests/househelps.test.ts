@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { auditLogs, householdMembers, househelpCategories, househelpCategoryLinks, househelps } from "../src/db/schema.js";
-import { createTestContext, csrf, signupUser, truncateAll, type TestContext } from "./helpers.js";
+import { attendanceSchedules, auditLogs, householdMembers, househelpCategories, househelpCategoryLinks, househelps } from "../src/db/schema.js";
+import { createTestContext, csrf, DAY, signupUser, truncateAll, type TestContext } from "./helpers.js";
 
 const ctx = createTestContext();
 beforeEach(() => truncateAll(ctx.db));
@@ -219,5 +219,67 @@ describe("househelps", () => {
     const b = await createHousehold(ctx, bob.cookie, "B");
     const res = await ctx.request.post(`/api/households/${b.id}/househelps`).set(csrf).set("cookie", alice.cookie).send({ name: "X" });
     expect(res.status).toBe(404);
+  });
+});
+
+describe("schedules", () => {
+  it("returns null when no schedule has been set", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    const create = await ctx.request.post(`/api/households/${h.id}/househelps`).set(csrf).set("cookie", owner.cookie).send({ name: "Sunita" });
+    const res = await ctx.request.get(`/api/households/${h.id}/househelps/${create.body.data.id}/schedule`).set("cookie", owner.cookie);
+    expect(res.status).toBe(200);
+    expect(res.body.data).toBeNull();
+  });
+
+  it("creates the first schedule version starting today", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    const create = await ctx.request.post(`/api/households/${h.id}/househelps`).set(csrf).set("cookie", owner.cookie).send({ name: "Sunita" });
+    const id = create.body.data.id;
+    const res = await ctx.request.put(`/api/households/${h.id}/househelps/${id}/schedule`).set(csrf).set("cookie", owner.cookie)
+      .send({ weekdays: [1, 2, 3, 4, 5], startTime: "09:00", endTime: "13:00" });
+    expect(res.status).toBe(200);
+    expect(res.body.data).toMatchObject({ weekdays: [1, 2, 3, 4, 5], startTime: "09:00", endTime: "13:00", effectiveFrom: "2026-09-29" });
+    const get = await ctx.request.get(`/api/households/${h.id}/househelps/${id}/schedule`).set("cookie", owner.cookie);
+    expect(get.body.data.weekdays).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it("editing a schedule creates a new version and preserves the old one's history", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    const create = await ctx.request.post(`/api/households/${h.id}/househelps`).set(csrf).set("cookie", owner.cookie).send({ name: "Sunita" });
+    const id = create.body.data.id;
+    await ctx.request.put(`/api/households/${h.id}/househelps/${id}/schedule`).set(csrf).set("cookie", owner.cookie).send({ weekdays: [1, 2, 3, 4, 5] });
+    ctx.clock.advance(3 * DAY);
+    const res = await ctx.request.put(`/api/households/${h.id}/househelps/${id}/schedule`).set(csrf).set("cookie", owner.cookie).send({ weekdays: [6] });
+    expect(res.status).toBe(200);
+    expect(res.body.data.weekdays).toEqual([6]);
+    const allVersions = await ctx.db.select().from(attendanceSchedules).where(eq(attendanceSchedules.househelpId, id));
+    expect(allVersions).toHaveLength(2);
+    const old = allVersions.find((v) => v.weekdays.length === 5)!;
+    expect(old.effectiveTo).not.toBeNull();
+    const current = await ctx.request.get(`/api/households/${h.id}/househelps/${id}/schedule`).set("cookie", owner.cookie);
+    expect(current.body.data.weekdays).toEqual([6]);
+  });
+
+  it("rejects an empty or duplicate weekday list", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    const create = await ctx.request.post(`/api/households/${h.id}/househelps`).set(csrf).set("cookie", owner.cookie).send({ name: "Sunita" });
+    const id = create.body.data.id;
+    expect((await ctx.request.put(`/api/households/${h.id}/househelps/${id}/schedule`).set(csrf).set("cookie", owner.cookie).send({ weekdays: [] })).status).toBe(400);
+    expect((await ctx.request.put(`/api/households/${h.id}/househelps/${id}/schedule`).set(csrf).set("cookie", owner.cookie).send({ weekdays: [1, 1] })).status).toBe(400);
+  });
+
+  it("MEMBER can view but not set a schedule", async () => {
+    const owner = await signupUser(ctx);
+    const member = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    await addMember(h.id, member.id, "MEMBER");
+    const create = await ctx.request.post(`/api/households/${h.id}/househelps`).set(csrf).set("cookie", owner.cookie).send({ name: "Sunita" });
+    const id = create.body.data.id;
+    expect((await ctx.request.get(`/api/households/${h.id}/househelps/${id}/schedule`).set("cookie", member.cookie)).status).toBe(200);
+    expect((await ctx.request.put(`/api/households/${h.id}/househelps/${id}/schedule`).set(csrf).set("cookie", member.cookie).send({ weekdays: [1] })).status).toBe(403);
   });
 });

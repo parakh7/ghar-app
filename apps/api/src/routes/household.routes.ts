@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { createCategorySchema, createHousehelpSchema, createHouseholdSchema, inviteMemberSchema, moveCategorySchema, updateCategorySchema, updateHousehelpSchema, updateHouseholdSchema, updateMemberSchema } from "@household/shared";
+import { createCategorySchema, createHousehelpSchema, createHouseholdSchema, inviteMemberSchema, moveCategorySchema, updateCategorySchema, updateHousehelpSchema, updateHouseholdSchema, updateMemberSchema, updateScheduleSchema } from "@household/shared";
 import { requireAuth } from "../middleware/auth.js";
 import { requireHousehold } from "../middleware/household.js";
 import { inviteLimiter } from "../middleware/rate-limit.js";
@@ -10,6 +10,7 @@ import * as categories from "../services/category.service.js";
 import * as households from "../services/household.service.js";
 import * as househelps from "../services/househelp.service.js";
 import * as members from "../services/member.service.js";
+import * as schedules from "../services/schedule.service.js";
 
 /**
  * Household-scoped resources live under /api/households/:householdId/…
@@ -128,6 +129,15 @@ export function householdRoutes(deps: Deps): Router {
   r.post("/:householdId/househelps/:id/unarchive", requireHousehold(deps, "househelps.manage"), async (req, res) => {
     await househelps.unarchiveHousehelp(deps, req.auth!.user.id, req.membership!.householdId, req.params.id as string, req.ip);
     ok(res, null, 200, "Househelp restored.");
+  });
+
+  r.get("/:householdId/househelps/:id/schedule", requireHousehold(deps, "househelps.view"), async (req, res) => {
+    ok(res, await schedules.getCurrentSchedule(deps, req.membership!, req.params.id as string));
+  });
+
+  r.put("/:householdId/househelps/:id/schedule", requireHousehold(deps, "househelps.manage"), async (req, res) => {
+    const input = parseBody(req, updateScheduleSchema);
+    ok(res, await schedules.putSchedule(deps, req.auth!.user.id, req.membership!, req.params.id as string, input, req.ip), 200, "Schedule updated.");
   });
 
   return r;
