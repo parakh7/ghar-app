@@ -46,3 +46,59 @@ export const acceptInviteSchema = z.object({ token: z.string().min(20).max(200) 
 export type InviteMemberInput = z.infer<typeof inviteMemberSchema>;
 export type UpdateMemberInput = z.infer<typeof updateMemberSchema>;
 export type AcceptInviteInput = z.infer<typeof acceptInviteSchema>;
+
+export const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD");
+export const timeSchema = z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Use 24-hour HH:MM");
+const paiseSchema = z.number().int().nonnegative();
+const salaryModeSchema = z.enum(["FIXED_MONTHLY", "ATTENDANCE_BASED", "DAILY_RATE"]);
+
+export const createCategorySchema = z.object({ name: z.string().trim().min(1, "Give the category a name").max(60) });
+export const updateCategorySchema = z.object({
+  name: z.string().trim().min(1, "Give the category a name").max(60).optional(),
+  isActive: z.boolean().optional(),
+}).refine((v) => v.name !== undefined || v.isActive !== undefined, { message: "Provide a name or active state to update." });
+export const moveCategorySchema = z.object({ direction: z.enum(["up", "down"]) });
+
+export const createHousehelpSchema = z.object({
+  name: z.string().trim().min(1, "Give the househelp a name").max(80),
+  phone: z.string().trim().max(20).optional(),
+  roleTitle: z.string().trim().max(60).optional(),
+  salaryMode: salaryModeSchema.default("FIXED_MONTHLY"),
+  monthlySalaryPaise: paiseSchema.optional(),
+  dailyRatePaise: paiseSchema.optional(),
+  halfDayRatePaise: paiseSchema.optional(),
+  salaryDueDay: z.number().int().min(1).max(31).default(1),
+  startDate: dateSchema.optional(),
+  notes: z.string().trim().max(2000).optional(),
+  categoryIds: z.array(z.string().uuid()).default([]),
+});
+
+export const updateHousehelpSchema = z.object({
+  name: z.string().trim().min(1, "Give the househelp a name").max(80).optional(),
+  phone: z.string().trim().max(20).optional(),
+  roleTitle: z.string().trim().max(60).optional(),
+  status: z.enum(["ACTIVE", "INACTIVE"]).optional(),
+  salaryMode: salaryModeSchema.optional(),
+  monthlySalaryPaise: paiseSchema.optional(),
+  dailyRatePaise: paiseSchema.optional(),
+  halfDayRatePaise: paiseSchema.optional(),
+  salaryDueDay: z.number().int().min(1).max(31).optional(),
+  startDate: dateSchema.optional(),
+  endDate: dateSchema.optional(),
+  notes: z.string().trim().max(2000).optional(),
+  categoryIds: z.array(z.string().uuid()).optional(),
+}).refine((v) => Object.values(v).some((x) => x !== undefined), { message: "Provide at least one field to update." });
+
+export const updateScheduleSchema = z.object({
+  weekdays: z.array(z.number().int().min(1).max(7)).min(1, "Pick at least one day")
+    .refine((arr) => new Set(arr).size === arr.length, "No duplicate days"),
+  startTime: timeSchema.optional(),
+  endTime: timeSchema.optional(),
+});
+
+export type CreateCategoryInput = z.infer<typeof createCategorySchema>;
+export type UpdateCategoryInput = z.infer<typeof updateCategorySchema>;
+export type MoveCategoryInput = z.infer<typeof moveCategorySchema>;
+export type CreateHousehelpInput = z.input<typeof createHousehelpSchema>;
+export type UpdateHousehelpInput = z.infer<typeof updateHousehelpSchema>;
+export type UpdateScheduleInput = z.infer<typeof updateScheduleSchema>;
