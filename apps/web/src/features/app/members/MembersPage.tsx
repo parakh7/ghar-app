@@ -98,8 +98,8 @@ export function MembersPage() {
                   <span className="list__meta">Invited as {ROLE_LABEL[inv.role]}</span>
                 </span>
                 <span style={{ display: "flex", gap: "var(--space-2)" }}>
-                  <Button variant="ghost" icon={<Mail size={20} aria-hidden />} loading={resendInvite.isPending} onClick={() => resendInvite.mutate(inv.id)}>Resend</Button>
-                  <Button variant="ghost" icon={<Trash2 size={20} aria-hidden />} aria-label={`Revoke invite for ${inv.email}`} onClick={() => revokeInvite.mutate(inv.id)} />
+                  <Button variant="ghost" icon={<Mail size={20} aria-hidden />} loading={resendInvite.isPending} onClick={() => resendInvite.mutate(inv.id, { onError: (err) => setPageError(messageFrom(err)) })}>Resend</Button>
+                  <Button variant="ghost" icon={<Trash2 size={20} aria-hidden />} aria-label={`Revoke invite for ${inv.email}`} onClick={() => revokeInvite.mutate(inv.id, { onError: (err) => setPageError(messageFrom(err)) })} />
                 </span>
               </div>
             ))}
