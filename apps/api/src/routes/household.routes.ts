@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { createHouseholdSchema, updateHouseholdSchema, updateMemberSchema } from "@household/shared";
+import { createHouseholdSchema, inviteMemberSchema, updateHouseholdSchema, updateMemberSchema } from "@household/shared";
 import { requireAuth } from "../middleware/auth.js";
 import { requireHousehold } from "../middleware/household.js";
 import { parseBody } from "../middleware/validate.js";
@@ -53,6 +53,24 @@ export function householdRoutes(deps: Deps): Router {
   r.delete("/:householdId/members/:userId", requireHousehold(deps, "members.manage"), async (req, res) => {
     await members.removeMember(deps, req.auth!.user.id, req.membership!, req.params.userId as string, req.ip);
     ok(res, null, 200, "Member removed.");
+  });
+
+  r.get("/:householdId/invites", requireHousehold(deps, "members.manage"), async (req, res) => {
+    ok(res, await members.listInvites(deps, req.membership!.householdId));
+  });
+
+  r.post("/:householdId/invites", requireHousehold(deps, "members.manage"), async (req, res) => {
+    const input = parseBody(req, inviteMemberSchema);
+    ok(res, await members.createInvite(deps, req.auth!.user.id, req.membership!, input, req.ip), 201, "Invite sent.");
+  });
+
+  r.delete("/:householdId/invites/:inviteId", requireHousehold(deps, "members.manage"), async (req, res) => {
+    await members.revokeInvite(deps, req.auth!.user.id, req.membership!.householdId, req.params.inviteId as string, req.ip);
+    ok(res, null, 200, "Invite revoked.");
+  });
+
+  r.post("/:householdId/invites/:inviteId/resend", requireHousehold(deps, "members.manage"), async (req, res) => {
+    ok(res, await members.resendInvite(deps, req.auth!.user.id, req.membership!, req.params.inviteId as string, req.ip), 200, "Invite resent.");
   });
 
   return r;

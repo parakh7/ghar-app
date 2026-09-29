@@ -20,3 +20,10 @@ export function passwordChangedMessage(to: string, name: string): EmailMessage {
     text: `Hi ${name},\n\nThe password for your account was just changed and all devices were signed out. If this wasn't you, reset your password immediately.`,
   };
 }
+
+export function inviteMessage(to: string, role: string, householdName: string, link: string): EmailMessage {
+  return {
+    to, tag: "household-invite", subject: `You're invited to join ${householdName} on Ghar`,
+    text: `Hi,\n\n${householdName} would like you to join as a ${role.toLowerCase()} on Ghar, the household manager.\n\nAccept the invite:\n${link}\n\nThis link expires in 7 days. If you weren't expecting this, you can ignore this email.`,
+  };
+}
