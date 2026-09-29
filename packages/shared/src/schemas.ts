@@ -32,3 +32,17 @@ export type LoginInput = z.infer<typeof loginSchema>;
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
 export type CreateHouseholdInput = z.input<typeof createHouseholdSchema>;
+
+export const inviteMemberSchema = z.object({
+  email: emailSchema,
+  role: z.enum(["ADMIN", "MEMBER", "VIEWER"]),
+});
+export const updateMemberSchema = z.object({
+  role: z.enum(["OWNER", "ADMIN", "MEMBER", "VIEWER"]).optional(),
+  displayName: z.string().trim().max(40).optional(),
+}).refine((v) => v.role !== undefined || v.displayName !== undefined, { message: "Provide a role or display name to update." });
+export const acceptInviteSchema = z.object({ token: z.string().min(20).max(200) });
+
+export type InviteMemberInput = z.infer<typeof inviteMemberSchema>;
+export type UpdateMemberInput = z.infer<typeof updateMemberSchema>;
+export type AcceptInviteInput = z.infer<typeof acceptInviteSchema>;
