@@ -91,6 +91,31 @@ describe("categories", () => {
     expect(list.body.data[0].name).toBe("Cleaning");
   });
 
+  it("moving the last category down is a no-op", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    const all = await ctx.db.select().from(househelpCategories).where(eq(househelpCategories.householdId, h.id)).orderBy(househelpCategories.sortOrder);
+    const last = all[all.length - 1]!;
+    const res = await ctx.request.post(`/api/households/${h.id}/categories/${last.id}/move`).set(csrf).set("cookie", owner.cookie).send({ direction: "down" });
+    expect(res.status).toBe(200);
+    const list = await ctx.request.get(`/api/households/${h.id}/categories`).set("cookie", owner.cookie);
+    expect(list.body.data[list.body.data.length - 1].name).toBe(last.name);
+  });
+
+  it("moves a category across a gap left by a soft-deleted category using index adjacency, not sortOrder arithmetic", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    const all = await ctx.db.select().from(househelpCategories).where(eq(househelpCategories.householdId, h.id)).orderBy(househelpCategories.sortOrder);
+    const utensils = all.find((c) => c.name === "Utensils")!; // sortOrder 2 — deleting it leaves a gap
+    const dusting = all.find((c) => c.name === "Dusting")!; // sortOrder 3 — sits right after the gap
+    await ctx.request.delete(`/api/households/${h.id}/categories/${utensils.id}`).set(csrf).set("cookie", owner.cookie);
+    const res = await ctx.request.post(`/api/households/${h.id}/categories/${dusting.id}/move`).set(csrf).set("cookie", owner.cookie).send({ direction: "up" });
+    expect(res.status).toBe(200);
+    const list = await ctx.request.get(`/api/households/${h.id}/categories`).set("cookie", owner.cookie);
+    const names = list.body.data.map((c: { name: string }) => c.name);
+    expect(names).toEqual(["Cleaning", "Dusting", "Cooking", "Laundry", "Ironing", "Driver", "Gardening", "Babysitting", "Other"]);
+  });
+
   it("VIEWER can list categories but not manage them", async () => {
     const owner = await signupUser(ctx);
     const viewer = await signupUser(ctx);
@@ -174,6 +199,21 @@ describe("househelps", () => {
     const create = await ctx.request.post(`/api/households/${h.id}/househelps`).set(csrf).set("cookie", owner.cookie).send({ name: "Sunita" });
     const res = await ctx.request.patch(`/api/households/${h.id}/househelps/${create.body.data.id}`).set(csrf).set("cookie", owner.cookie).send({});
     expect(res.status).toBe(400);
+  });
+
+  it("clears all category links when categoryIds is sent as an empty array", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    const cats = await ctx.request.get(`/api/households/${h.id}/categories`).set("cookie", owner.cookie);
+    const [cleaning, cooking] = cats.body.data;
+    const create = await ctx.request.post(`/api/households/${h.id}/househelps`).set(csrf).set("cookie", owner.cookie)
+      .send({ name: "Sunita", categoryIds: [cleaning.id, cooking.id] });
+    const res = await ctx.request.patch(`/api/households/${h.id}/househelps/${create.body.data.id}`).set(csrf).set("cookie", owner.cookie)
+      .send({ categoryIds: [] });
+    expect(res.status).toBe(200);
+    expect(res.body.data.categoryIds).toEqual([]);
+    const links = await ctx.db.select().from(househelpCategoryLinks).where(eq(househelpCategoryLinks.househelpId, create.body.data.id));
+    expect(links).toHaveLength(0);
   });
 
   it("archives and unarchives a househelp, and both are audited", async () => {
@@ -261,6 +301,38 @@ describe("schedules", () => {
     expect(old.effectiveTo).not.toBeNull();
     const current = await ctx.request.get(`/api/households/${h.id}/househelps/${id}/schedule`).set("cookie", owner.cookie);
     expect(current.body.data.weekdays).toEqual([6]);
+  });
+
+  it("uses the household's timezone, not UTC, to compute effectiveFrom near a calendar-date boundary", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    const create = await ctx.request.post(`/api/households/${h.id}/househelps`).set(csrf).set("cookie", owner.cookie).send({ name: "Sunita" });
+    const id = create.body.data.id;
+    // 2026-09-29T19:00:00Z is still 2026-09-29 in UTC but already 2026-09-30 00:30 in Asia/Kolkata (UTC+5:30).
+    ctx.clock.set("2026-09-29T19:00:00Z");
+    const res = await ctx.request.put(`/api/households/${h.id}/househelps/${id}/schedule`).set(csrf).set("cookie", owner.cookie).send({ weekdays: [1] });
+    expect(res.status).toBe(200);
+    expect(res.body.data.effectiveFrom).toBe("2026-09-30");
+  });
+
+  it("editing a schedule a second time on the same calendar day updates the current version in place instead of inserting an inverted junk row", async () => {
+    // Reset to a known instant — earlier tests in this file mutate the shared FakeClock, and this
+    // test's whole point is to check same-day behavior, so it must not depend on whatever the clock
+    // was left at.
+    ctx.clock.set("2026-09-29T04:30:00Z");
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    const create = await ctx.request.post(`/api/households/${h.id}/househelps`).set(csrf).set("cookie", owner.cookie).send({ name: "Sunita" });
+    const id = create.body.data.id;
+    const first = await ctx.request.put(`/api/households/${h.id}/househelps/${id}/schedule`).set(csrf).set("cookie", owner.cookie).send({ weekdays: [1, 2, 3, 4, 5] });
+    const today = first.body.data.effectiveFrom;
+    const res = await ctx.request.put(`/api/households/${h.id}/househelps/${id}/schedule`).set(csrf).set("cookie", owner.cookie).send({ weekdays: [6] });
+    expect(res.status).toBe(200);
+    expect(res.body.data.weekdays).toEqual([6]);
+    const allVersions = await ctx.db.select().from(attendanceSchedules).where(eq(attendanceSchedules.househelpId, id));
+    expect(allVersions).toHaveLength(1);
+    expect(allVersions[0]!.effectiveTo).toBeNull();
+    expect(allVersions[0]!.effectiveFrom).toBe(today);
   });
 
   it("rejects an empty or duplicate weekday list", async () => {

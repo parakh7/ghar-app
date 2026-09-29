@@ -42,6 +42,29 @@ describe("CategoriesPage", () => {
     expect(JSON.parse((postCall![1] as RequestInit).body as string)).toEqual({ name: "Pet care" });
   });
 
+  it("clicking a move button posts the move request with the correct direction", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/households/h1")) return jsonResponse({ success: true, data: { ...HOUSEHOLD, permissions: ["househelps.view", "categories.manage"] }, message: null });
+      if (init?.method === "POST" && url.endsWith("/move")) return jsonResponse({ success: true, data: null, message: null });
+      if (url.endsWith("/categories")) {
+        return jsonResponse({
+          success: true,
+          data: [{ id: "c1", name: "Cleaning", sortOrder: 0, isActive: true }, { id: "c2", name: "Cooking", sortOrder: 1, isActive: true }],
+          message: null,
+        });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    }) as typeof fetch);
+    renderPage();
+    expect(await screen.findByText("Cleaning")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Move Cooking up" }));
+    const moveCall = fetchSpy.mock.calls.find(([u, init]) => String(u).endsWith("/move") && (init as RequestInit | undefined)?.method === "POST");
+    expect(moveCall).toBeDefined();
+    expect(String(moveCall![0])).toContain("/categories/c2/move");
+    expect(JSON.parse((moveCall![1] as RequestInit).body as string)).toEqual({ direction: "up" });
+  });
+
   it("hides the add-category form and per-row controls for a viewer without categories.manage", async () => {
     mockFetch(["househelps.view"]);
     renderPage();

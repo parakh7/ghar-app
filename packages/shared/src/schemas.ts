@@ -75,17 +75,17 @@ export const createHousehelpSchema = z.object({
 
 export const updateHousehelpSchema = z.object({
   name: z.string().trim().min(1, "Give the househelp a name").max(80).optional(),
-  phone: z.string().trim().max(20).optional(),
-  roleTitle: z.string().trim().max(60).optional(),
+  phone: z.string().trim().max(20).nullable().optional(),
+  roleTitle: z.string().trim().max(60).nullable().optional(),
   status: z.enum(["ACTIVE", "INACTIVE"]).optional(),
   salaryMode: salaryModeSchema.optional(),
-  monthlySalaryPaise: paiseSchema.optional(),
-  dailyRatePaise: paiseSchema.optional(),
-  halfDayRatePaise: paiseSchema.optional(),
+  monthlySalaryPaise: paiseSchema.nullable().optional(),
+  dailyRatePaise: paiseSchema.nullable().optional(),
+  halfDayRatePaise: paiseSchema.nullable().optional(),
   salaryDueDay: z.number().int().min(1).max(31).optional(),
-  startDate: dateSchema.optional(),
-  endDate: dateSchema.optional(),
-  notes: z.string().trim().max(2000).optional(),
+  startDate: dateSchema.nullable().optional(),
+  endDate: dateSchema.nullable().optional(),
+  notes: z.string().trim().max(2000).nullable().optional(),
   categoryIds: z.array(z.string().uuid()).optional(),
 }).refine((v) => Object.values(v).some((x) => x !== undefined), { message: "Provide at least one field to update." });
 

@@ -36,10 +36,25 @@ export async function getCurrentSchedule(deps: Deps, membership: Membership, hou
 export async function putSchedule(deps: Deps, actorUserId: string, membership: Membership, househelpId: string, input: UpdateScheduleInput, ip?: string): Promise<ScheduleDTO> {
   const today = dateInZone(deps.clock.now(), membership.timezone);
   const yesterday = addDays(today, -1);
+  const newValue = { weekdays: input.weekdays, startTime: input.startTime ?? null, endTime: input.endTime ?? null };
   const row = await deps.db.transaction(async (tx) => {
-    const [current] = await tx.select({ id: attendanceSchedules.id }).from(attendanceSchedules)
+    const [current] = await tx.select({ id: attendanceSchedules.id, effectiveFrom: attendanceSchedules.effectiveFrom }).from(attendanceSchedules)
       .where(currentlyEffective(membership.householdId, househelpId, today))
       .for("update");
+
+    // If the currently-effective row was itself created today (a second-or-later edit on the same
+    // calendar day), update it in place instead of closing it — closing would set
+    // effectiveTo = yesterday on a row whose effectiveFrom = today, an inverted, permanently
+    // -inapplicable interval that pollutes history for no reason.
+    if (current && current.effectiveFrom === today) {
+      const [updated] = await tx.update(attendanceSchedules).set(newValue).where(eq(attendanceSchedules.id, current.id)).returning();
+      await recordAudit(tx, {
+        householdId: membership.householdId, actorUserId, action: "schedule.updated", entityType: "attendance_schedule", entityId: updated!.id,
+        newValue, ipAddress: ip ?? null,
+      });
+      return updated!;
+    }
+
     if (current) {
       await tx.update(attendanceSchedules).set({ effectiveTo: yesterday }).where(eq(attendanceSchedules.id, current.id));
     }
@@ -49,7 +64,7 @@ export async function putSchedule(deps: Deps, actorUserId: string, membership: M
     }).returning();
     await recordAudit(tx, {
       householdId: membership.householdId, actorUserId, action: "schedule.updated", entityType: "attendance_schedule", entityId: inserted!.id,
-      newValue: { weekdays: input.weekdays, startTime: input.startTime ?? null, endTime: input.endTime ?? null }, ipAddress: ip ?? null,
+      newValue, ipAddress: ip ?? null,
     });
     return inserted!;
   });

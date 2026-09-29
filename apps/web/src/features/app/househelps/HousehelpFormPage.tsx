@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { Navigate, useNavigate, useParams } from "react-router-dom";
-import { createHousehelpSchema } from "@household/shared";
+import { createHousehelpSchema, MoneyError, rupeesToPaise, updateHousehelpSchema } from "@household/shared";
 import { Alert } from "../../../components/Alert";
 import { Button } from "../../../components/Button";
 import { TextField } from "../../../components/TextField";
@@ -20,11 +20,7 @@ function paiseToInput(paise: number | null | undefined): string {
   return paise == null ? "" : (paise / 100).toFixed(2);
 }
 
-function inputToPaise(value: string): number | undefined {
-  const trimmed = value.trim();
-  if (!trimmed) return undefined;
-  return Math.round(Number(trimmed) * 100);
-}
+const AMOUNT_HINT = "Enter a valid rupee amount, e.g. 1500 or 1,500.50";
 
 export function HousehelpFormPage({ mode }: { mode: "create" | "edit" }) {
   const { id } = useParams();
@@ -40,7 +36,8 @@ export function HousehelpFormPage({ mode }: { mode: "create" | "edit" }) {
   const errors = useFormErrors();
 
   const [form, setForm] = useState({
-    name: "", phone: "", roleTitle: "", salaryMode: "FIXED_MONTHLY" as (typeof SALARY_MODES)[number]["value"],
+    name: "", phone: "", roleTitle: "", status: "ACTIVE" as "ACTIVE" | "INACTIVE",
+    salaryMode: "FIXED_MONTHLY" as (typeof SALARY_MODES)[number]["value"],
     monthlySalaryPaise: "", dailyRatePaise: "", halfDayRatePaise: "", salaryDueDay: "1", notes: "",
   });
   const [categoryIds, setCategoryIds] = useState<string[]>([]);
@@ -57,7 +54,7 @@ export function HousehelpFormPage({ mode }: { mode: "create" | "edit" }) {
     const h = existing.data;
     setSeeded(true);
     setForm({
-      name: h.name, phone: h.phone ?? "", roleTitle: h.roleTitle ?? "", salaryMode: h.salaryMode,
+      name: h.name, phone: h.phone ?? "", roleTitle: h.roleTitle ?? "", status: h.status, salaryMode: h.salaryMode,
       monthlySalaryPaise: paiseToInput(h.monthlySalaryPaise), dailyRatePaise: paiseToInput(h.dailyRatePaise), halfDayRatePaise: paiseToInput(h.halfDayRatePaise),
       salaryDueDay: String(h.salaryDueDay), notes: h.notes ?? "",
     });
@@ -75,17 +72,57 @@ export function HousehelpFormPage({ mode }: { mode: "create" | "edit" }) {
   function onSubmit(e: FormEvent) {
     e.preventDefault();
     errors.clear();
-    const body = {
-      name: form.name, phone: form.phone || undefined, roleTitle: form.roleTitle || undefined, salaryMode: form.salaryMode,
-      monthlySalaryPaise: inputToPaise(form.monthlySalaryPaise), dailyRatePaise: inputToPaise(form.dailyRatePaise), halfDayRatePaise: inputToPaise(form.halfDayRatePaise),
-      salaryDueDay: Number(form.salaryDueDay), notes: form.notes || undefined, categoryIds,
-    };
+
+    const isMonthlyMode = form.salaryMode === "FIXED_MONTHLY" || form.salaryMode === "ATTENDANCE_BASED";
+    const isDailyMode = form.salaryMode === "DAILY_RATE";
+    const moneyErrors: Record<string, string> = {};
+
+    // Converts a rupee-input field to paise, using the app's own `rupeesToPaise` parser (so it
+    // accepts what `formatINR` displays, e.g. "1,250"). A field that's irrelevant to the currently
+    // selected salaryMode — or left blank — resolves to `undefined` on create (omit it) or `null`
+    // on edit (explicitly clear the stale value, including when switching salaryMode away from it).
+    function money(fieldKey: string, raw: string, relevant: boolean): number | null | undefined {
+      if (!relevant) return mode === "create" ? undefined : null;
+      const trimmed = raw.trim();
+      if (!trimmed) return mode === "create" ? undefined : null;
+      try {
+        return rupeesToPaise(trimmed);
+      } catch (err) {
+        if (err instanceof MoneyError) moneyErrors[fieldKey] = AMOUNT_HINT;
+        return undefined;
+      }
+    }
+
+    const monthlySalaryPaise = money("monthlySalaryPaise", form.monthlySalaryPaise, isMonthlyMode);
+    const dailyRatePaise = money("dailyRatePaise", form.dailyRatePaise, isDailyMode);
+    const halfDayRatePaise = money("halfDayRatePaise", form.halfDayRatePaise, isDailyMode);
+
+    if (Object.keys(moneyErrors).length > 0) return errors.setFields(moneyErrors);
+
     if (mode === "create") {
+      const body = {
+        name: form.name, phone: form.phone || undefined, roleTitle: form.roleTitle || undefined, salaryMode: form.salaryMode,
+        monthlySalaryPaise, dailyRatePaise, halfDayRatePaise,
+        salaryDueDay: Number(form.salaryDueDay), notes: form.notes || undefined, categoryIds,
+      };
       const parsed = createHousehelpSchema.safeParse(body);
       if (!parsed.success) return errors.setFields(zodFieldErrors(parsed.error));
       createHousehelp.mutate(parsed.data, { onSuccess: (result) => navigate(`/househelps/${result.data.id}`, { replace: true }), onError: errors.fromError });
     } else {
-      updateHousehelp.mutate({ id: id!, body }, { onSuccess: () => navigate(`/househelps/${id}`, { replace: true }), onError: errors.fromError });
+      const body = {
+        name: form.name,
+        phone: form.phone.trim() ? form.phone : null,
+        roleTitle: form.roleTitle.trim() ? form.roleTitle : null,
+        status: form.status,
+        salaryMode: form.salaryMode,
+        monthlySalaryPaise, dailyRatePaise, halfDayRatePaise,
+        salaryDueDay: Number(form.salaryDueDay),
+        notes: form.notes.trim() ? form.notes : null,
+        categoryIds,
+      };
+      const parsed = updateHousehelpSchema.safeParse(body);
+      if (!parsed.success) return errors.setFields(zodFieldErrors(parsed.error));
+      updateHousehelp.mutate({ id: id!, body: parsed.data }, { onSuccess: () => navigate(`/househelps/${id}`, { replace: true }), onError: errors.fromError });
     }
   }
 
@@ -100,6 +137,20 @@ export function HousehelpFormPage({ mode }: { mode: "create" | "edit" }) {
         <TextField label="Name" value={form.name} onChange={set("name")} error={errors.fieldErrors.name} autoFocus />
         <TextField label="Phone" type="tel" value={form.phone} onChange={set("phone")} error={errors.fieldErrors.phone} />
         <TextField label="Role" hint="e.g. Cook, Full-time help" value={form.roleTitle} onChange={set("roleTitle")} error={errors.fieldErrors.roleTitle} />
+
+        {mode === "edit" && (
+          <div className="field">
+            <span className="field__label">Status</span>
+            <div>
+              <button
+                type="button" className="chip" aria-pressed={form.status === "ACTIVE"}
+                onClick={() => setForm((f) => ({ ...f, status: f.status === "ACTIVE" ? "INACTIVE" : "ACTIVE" }))}
+              >
+                {form.status === "ACTIVE" ? "Active" : "Inactive"}
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="field">
           <label className="field__label" htmlFor="salary-mode">Salary type</label>

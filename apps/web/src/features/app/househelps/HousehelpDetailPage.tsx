@@ -6,7 +6,7 @@ import { Alert } from "../../../components/Alert";
 import { Button } from "../../../components/Button";
 import { useActiveHousehold } from "../useActiveHousehold";
 import { useHousehold } from "../members/useMembers";
-import { useArchiveHousehelp, useHousehelp, useUnarchiveHousehelp } from "./useHousehelps";
+import { useArchiveHousehelp, useCategories, useHousehelp, useUnarchiveHousehelp } from "./useHousehelps";
 
 function messageFrom(err: unknown): string {
   return err instanceof ApiError ? err.message : "Something went wrong. Please try again.";
@@ -19,6 +19,7 @@ export function HousehelpDetailPage() {
   const householdId = active?.id;
   const householdQuery = useHousehold(householdId);
   const househelpQuery = useHousehelp(householdId, id);
+  const categoriesQuery = useCategories(householdId);
   const archive = useArchiveHousehelp(householdId ?? "");
   const unarchive = useUnarchiveHousehelp(householdId ?? "");
   const canManage = householdQuery.data?.permissions.includes("househelps.manage") ?? false;
@@ -31,6 +32,7 @@ export function HousehelpDetailPage() {
 
   if (!householdId || !househelpQuery.data) return null;
   const h = househelpQuery.data;
+  const categoryNames = (categoriesQuery.data ?? []).filter((c) => h.categoryIds.includes(c.id)).map((c) => c.name);
 
   return (
     <>
@@ -43,6 +45,16 @@ export function HousehelpDetailPage() {
         <div className="list__item"><span className="list__text"><span className="list__label" style={{ display: "block" }}>Phone</span><span className="list__meta">{h.phone ?? "—"}</span></span></div>
         <div className="list__item"><span className="list__text"><span className="list__label" style={{ display: "block" }}>Status</span><span className="list__meta">{h.status === "ACTIVE" ? "Active" : "Inactive"}</span></span></div>
         <div className="list__item"><span className="list__text"><span className="list__label" style={{ display: "block" }}>Salary</span><span className="list__meta">{h.monthlySalaryPaise != null ? formatINR(h.monthlySalaryPaise) + "/month" : h.dailyRatePaise != null ? formatINR(h.dailyRatePaise) + "/day" : "—"}</span></span></div>
+        <div className="list__item">
+          <span className="list__text">
+            <span className="list__label" style={{ display: "block" }}>Categories</span>
+            <span className="list__meta">
+              {categoryNames.length > 0
+                ? categoryNames.map((name) => <span key={name} className="badge badge--neutral" style={{ marginRight: "var(--space-1)" }}>{name}</span>)
+                : "—"}
+            </span>
+          </span>
+        </div>
       </div>
 
       {canManage && (
