@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { auditLogs, householdMembers, househelpCategories } from "../src/db/schema.js";
+import { auditLogs, householdMembers, househelpCategories, househelpCategoryLinks, househelps } from "../src/db/schema.js";
 import { createTestContext, csrf, signupUser, truncateAll, type TestContext } from "./helpers.js";
 
 const ctx = createTestContext();
@@ -107,6 +107,117 @@ describe("categories", () => {
     await createHousehold(ctx, alice.cookie, "A");
     const b = await createHousehold(ctx, bob.cookie, "B");
     const res = await ctx.request.post(`/api/households/${b.id}/categories`).set(csrf).set("cookie", alice.cookie).send({ name: "X" });
+    expect(res.status).toBe(404);
+  });
+});
+
+describe("househelps", () => {
+  it("creates a househelp with defaults applied", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    const res = await ctx.request.post(`/api/households/${h.id}/househelps`).set(csrf).set("cookie", owner.cookie).send({ name: "Sunita" });
+    expect(res.status).toBe(201);
+    expect(res.body.data).toMatchObject({ name: "Sunita", status: "ACTIVE", salaryMode: "FIXED_MONTHLY", salaryDueDay: 1, categoryIds: [] });
+  });
+
+  it("creates a househelp with category links", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    const cats = await ctx.request.get(`/api/households/${h.id}/categories`).set("cookie", owner.cookie);
+    const [cleaning, cooking] = cats.body.data;
+    const res = await ctx.request.post(`/api/households/${h.id}/househelps`).set(csrf).set("cookie", owner.cookie)
+      .send({ name: "Sunita", categoryIds: [cleaning.id, cooking.id] });
+    expect(res.status).toBe(201);
+    expect(res.body.data.categoryIds.sort()).toEqual([cleaning.id, cooking.id].sort());
+  });
+
+  it("stores money fields as integer paise", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    const res = await ctx.request.post(`/api/households/${h.id}/househelps`).set(csrf).set("cookie", owner.cookie)
+      .send({ name: "Ramesh", salaryMode: "DAILY_RATE", dailyRatePaise: 80000, halfDayRatePaise: 40000 });
+    expect(res.status).toBe(201);
+    expect(res.body.data.dailyRatePaise).toBe(80000);
+    expect(res.body.data.halfDayRatePaise).toBe(40000);
+  });
+
+  it("lists active househelps by default and includes archived on request", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    const create = await ctx.request.post(`/api/households/${h.id}/househelps`).set(csrf).set("cookie", owner.cookie).send({ name: "Sunita" });
+    await ctx.request.post(`/api/households/${h.id}/househelps/${create.body.data.id}/archive`).set(csrf).set("cookie", owner.cookie);
+    const defaultList = await ctx.request.get(`/api/households/${h.id}/househelps`).set("cookie", owner.cookie);
+    expect(defaultList.body.data).toHaveLength(0);
+    const withArchived = await ctx.request.get(`/api/households/${h.id}/househelps?includeArchived=true`).set("cookie", owner.cookie);
+    expect(withArchived.body.data).toHaveLength(1);
+  });
+
+  it("updates fields and fully replaces category links", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    const cats = await ctx.request.get(`/api/households/${h.id}/categories`).set("cookie", owner.cookie);
+    const [cleaning, cooking, utensils] = cats.body.data;
+    const create = await ctx.request.post(`/api/households/${h.id}/househelps`).set(csrf).set("cookie", owner.cookie)
+      .send({ name: "Sunita", categoryIds: [cleaning.id, cooking.id] });
+    const res = await ctx.request.patch(`/api/households/${h.id}/househelps/${create.body.data.id}`).set(csrf).set("cookie", owner.cookie)
+      .send({ name: "Sunita Devi", categoryIds: [utensils.id] });
+    expect(res.status).toBe(200);
+    expect(res.body.data.name).toBe("Sunita Devi");
+    expect(res.body.data.categoryIds).toEqual([utensils.id]);
+    const links = await ctx.db.select().from(househelpCategoryLinks).where(eq(househelpCategoryLinks.househelpId, create.body.data.id));
+    expect(links).toHaveLength(1);
+  });
+
+  it("rejects an update with no fields", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    const create = await ctx.request.post(`/api/households/${h.id}/househelps`).set(csrf).set("cookie", owner.cookie).send({ name: "Sunita" });
+    const res = await ctx.request.patch(`/api/households/${h.id}/househelps/${create.body.data.id}`).set(csrf).set("cookie", owner.cookie).send({});
+    expect(res.status).toBe(400);
+  });
+
+  it("archives and unarchives a househelp, and both are audited", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    const create = await ctx.request.post(`/api/households/${h.id}/househelps`).set(csrf).set("cookie", owner.cookie).send({ name: "Sunita" });
+    const id = create.body.data.id;
+    const archive = await ctx.request.post(`/api/households/${h.id}/househelps/${id}/archive`).set(csrf).set("cookie", owner.cookie);
+    expect(archive.status).toBe(200);
+    const [row] = await ctx.db.select().from(househelps).where(eq(househelps.id, id));
+    expect(row!.archivedAt).not.toBeNull();
+    const unarchive = await ctx.request.post(`/api/households/${h.id}/househelps/${id}/unarchive`).set(csrf).set("cookie", owner.cookie);
+    expect(unarchive.status).toBe(200);
+    const [row2] = await ctx.db.select().from(househelps).where(eq(househelps.id, id));
+    expect(row2!.archivedAt).toBeNull();
+    const logs = await ctx.db.select().from(auditLogs).where(and(eq(auditLogs.householdId, h.id), eq(auditLogs.entityId, id)));
+    expect(logs.map((l) => l.action)).toEqual(expect.arrayContaining(["househelp.created", "househelp.archived", "househelp.unarchived"]));
+  });
+
+  it("an archived househelp is still fetchable by id", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    const create = await ctx.request.post(`/api/households/${h.id}/househelps`).set(csrf).set("cookie", owner.cookie).send({ name: "Sunita" });
+    await ctx.request.post(`/api/households/${h.id}/househelps/${create.body.data.id}/archive`).set(csrf).set("cookie", owner.cookie);
+    const res = await ctx.request.get(`/api/households/${h.id}/househelps/${create.body.data.id}`).set("cookie", owner.cookie);
+    expect(res.status).toBe(200);
+  });
+
+  it("MEMBER can view but not manage househelps", async () => {
+    const owner = await signupUser(ctx);
+    const member = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    await addMember(h.id, member.id, "MEMBER");
+    expect((await ctx.request.get(`/api/households/${h.id}/househelps`).set("cookie", member.cookie)).status).toBe(200);
+    const res = await ctx.request.post(`/api/households/${h.id}/househelps`).set(csrf).set("cookie", member.cookie).send({ name: "X" });
+    expect(res.status).toBe(403);
+  });
+
+  it("a member of household A cannot manage househelps of household B", async () => {
+    const alice = await signupUser(ctx);
+    const bob = await signupUser(ctx);
+    await createHousehold(ctx, alice.cookie, "A");
+    const b = await createHousehold(ctx, bob.cookie, "B");
+    const res = await ctx.request.post(`/api/households/${b.id}/househelps`).set(csrf).set("cookie", alice.cookie).send({ name: "X" });
     expect(res.status).toBe(404);
   });
 });

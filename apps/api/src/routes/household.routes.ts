@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { createCategorySchema, createHouseholdSchema, inviteMemberSchema, moveCategorySchema, updateCategorySchema, updateHouseholdSchema, updateMemberSchema } from "@household/shared";
+import { createCategorySchema, createHousehelpSchema, createHouseholdSchema, inviteMemberSchema, moveCategorySchema, updateCategorySchema, updateHousehelpSchema, updateHouseholdSchema, updateMemberSchema } from "@household/shared";
 import { requireAuth } from "../middleware/auth.js";
 import { requireHousehold } from "../middleware/household.js";
 import { inviteLimiter } from "../middleware/rate-limit.js";
@@ -8,6 +8,7 @@ import { ok } from "../lib/respond.js";
 import type { Deps } from "../services/deps.js";
 import * as categories from "../services/category.service.js";
 import * as households from "../services/household.service.js";
+import * as househelps from "../services/househelp.service.js";
 import * as members from "../services/member.service.js";
 
 /**
@@ -99,6 +100,34 @@ export function householdRoutes(deps: Deps): Router {
     const { direction } = parseBody(req, moveCategorySchema);
     await categories.moveCategory(deps, req.auth!.user.id, req.membership!.householdId, req.params.categoryId as string, direction, req.ip);
     ok(res, null, 200, "Category moved.");
+  });
+
+  r.get("/:householdId/househelps", requireHousehold(deps, "househelps.view"), async (req, res) => {
+    ok(res, await househelps.listHousehelps(deps.db, req.membership!.householdId, req.query.includeArchived === "true"));
+  });
+
+  r.post("/:householdId/househelps", requireHousehold(deps, "househelps.manage"), async (req, res) => {
+    const input = parseBody(req, createHousehelpSchema);
+    ok(res, await househelps.createHousehelp(deps, req.auth!.user.id, req.membership!.householdId, input, req.ip), 201, "Househelp added.");
+  });
+
+  r.get("/:householdId/househelps/:id", requireHousehold(deps, "househelps.view"), async (req, res) => {
+    ok(res, await househelps.getHousehelp(deps.db, req.membership!.householdId, req.params.id as string));
+  });
+
+  r.patch("/:householdId/househelps/:id", requireHousehold(deps, "househelps.manage"), async (req, res) => {
+    const patch = parseBody(req, updateHousehelpSchema);
+    ok(res, await househelps.updateHousehelp(deps, req.auth!.user.id, req.membership!.householdId, req.params.id as string, patch, req.ip), 200, "Househelp updated.");
+  });
+
+  r.post("/:householdId/househelps/:id/archive", requireHousehold(deps, "househelps.manage"), async (req, res) => {
+    await househelps.archiveHousehelp(deps, req.auth!.user.id, req.membership!.householdId, req.params.id as string, req.ip);
+    ok(res, null, 200, "Househelp removed.");
+  });
+
+  r.post("/:householdId/househelps/:id/unarchive", requireHousehold(deps, "househelps.manage"), async (req, res) => {
+    await househelps.unarchiveHousehelp(deps, req.auth!.user.id, req.membership!.householdId, req.params.id as string, req.ip);
+    ok(res, null, 200, "Househelp restored.");
   });
 
   return r;
