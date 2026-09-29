@@ -9,6 +9,7 @@ import { AppShell } from "./features/app/AppShell";
 import { ComingSoonPage } from "./features/app/ComingSoonPage";
 import { RedirectIfSignedIn, RequireAuth } from "./features/app/guards";
 import { HomePage } from "./features/app/HomePage";
+import { AcceptInvitePage } from "./features/app/members/AcceptInvitePage";
 import { MembersPage } from "./features/app/members/MembersPage";
 import { MorePage } from "./features/app/MorePage";
 import { OnboardingPage } from "./features/app/OnboardingPage";
@@ -23,6 +24,7 @@ export function App() {
       <Route path="/verify-email" element={<VerifyEmailPage />} />
       <Route path="/onboarding" element={<RequireAuth needsHousehold={false}><OnboardingPage /></RequireAuth>} />
       <Route path="/onboarding/new" element={<RequireAuth needsHousehold={false}><OnboardingPage /></RequireAuth>} />
+      <Route path="/invites/accept" element={<RequireAuth needsHousehold={false}><AcceptInvitePage /></RequireAuth>} />
       <Route element={<RequireAuth><AppShell /></RequireAuth>}>
         <Route index element={<HomePage />} />
         <Route path="househelps" element={<ComingSoonPage title="Househelps" icon={<Users size={22} />} heading="Your household doesn't have any househelps yet." text="Adding househelps, schedules and salaries is coming in the next update." />} />

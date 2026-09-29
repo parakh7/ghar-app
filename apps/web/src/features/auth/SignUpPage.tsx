@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { signupSchema, type MeDTO } from "@household/shared";
 import { post } from "../../lib/api";
@@ -16,10 +16,16 @@ export function SignUpPage() {
   const errors = useFormErrors();
   const qc = useQueryClient();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const mutation = useMutation({
     mutationFn: (body: typeof form) => post<MeDTO>("/auth/signup", body),
-    onSuccess: ({ data }) => { qc.setQueryData(meKey, data); navigate("/onboarding", { replace: true }); },
+    onSuccess: ({ data }) => {
+      qc.setQueryData(meKey, data);
+      const from = (location.state as { from?: unknown } | null)?.from;
+      const safe = typeof from === "string" && from.startsWith("/") && !from.startsWith("//");
+      navigate(safe ? (from as string) : "/onboarding", { replace: true });
+    },
     onError: errors.fromError,
   });
 

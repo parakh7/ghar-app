@@ -38,7 +38,7 @@ export function SignInPage() {
     <AuthLayout
       title="Welcome back"
       subtitle="Sign in to see who's coming today and what's due."
-      footer={<p>New here? <Link to="/signup">Create an account</Link></p>}
+      footer={<p>New here? <Link to="/signup" state={location.state}>Create an account</Link></p>}
     >
       <form className="auth__form" onSubmit={onSubmit} noValidate>
         {notice && <Alert tone="success" title={notice} />}
