@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { Navigate, useNavigate, useParams } from "react-router-dom";
 import { createHousehelpSchema } from "@household/shared";
 import { Alert } from "../../../components/Alert";
@@ -44,18 +44,21 @@ export function HousehelpFormPage({ mode }: { mode: "create" | "edit" }) {
     monthlySalaryPaise: "", dailyRatePaise: "", halfDayRatePaise: "", salaryDueDay: "1", notes: "",
   });
   const [categoryIds, setCategoryIds] = useState<string[]>([]);
+  const [loadedExisting, setLoadedExisting] = useState(existing.data);
 
-  useEffect(() => {
-    if (mode === "edit" && existing.data) {
-      const h = existing.data;
-      setForm({
-        name: h.name, phone: h.phone ?? "", roleTitle: h.roleTitle ?? "", salaryMode: h.salaryMode,
-        monthlySalaryPaise: paiseToInput(h.monthlySalaryPaise), dailyRatePaise: paiseToInput(h.dailyRatePaise), halfDayRatePaise: paiseToInput(h.halfDayRatePaise),
-        salaryDueDay: String(h.salaryDueDay), notes: h.notes ?? "",
-      });
-      setCategoryIds(h.categoryIds);
-    }
-  }, [mode, existing.data]);
+  // Seed form state from the loaded househelp once, the first render after it arrives.
+  // Updating state during render (guarded by the loadedExisting !== data check) rather than in a
+  // useEffect avoids an extra commit-and-rerender pass for this one-time initialization.
+  if (mode === "edit" && existing.data && existing.data !== loadedExisting) {
+    const h = existing.data;
+    setLoadedExisting(h);
+    setForm({
+      name: h.name, phone: h.phone ?? "", roleTitle: h.roleTitle ?? "", salaryMode: h.salaryMode,
+      monthlySalaryPaise: paiseToInput(h.monthlySalaryPaise), dailyRatePaise: paiseToInput(h.dailyRatePaise), halfDayRatePaise: paiseToInput(h.halfDayRatePaise),
+      salaryDueDay: String(h.salaryDueDay), notes: h.notes ?? "",
+    });
+    setCategoryIds(h.categoryIds);
+  }
 
   function set<K extends keyof typeof form>(key: K) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setForm((f) => ({ ...f, [key]: e.target.value }));

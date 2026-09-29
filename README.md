@@ -4,7 +4,7 @@
 
 A mobile-first, PWA-ready app for managing househelps, attendance, checklists, salaries, household bills and reminders — built for families, including non-technical and senior members.
 
-**Status: Phase 1 of 10 complete** — architecture, full data model, authentication, households and household-level authorization. See [Roadmap](#roadmap).
+**Status: Phase 2 of 10 complete** — members and invites, househelps, categories (CRUD and reorder), and schedules, on top of Phase 1's architecture, data model, authentication, households and household-level authorization. See [Roadmap](#roadmap).
 
 ---
 
@@ -296,8 +296,8 @@ Any Node 20+ host plus managed Postgres (for example Render, Railway, Fly.io or 
 | Phase | Scope | Status |
 |---|---|---|
 | 1 | Architecture, data model, auth, households, authorization | ✅ |
-| 2 | Members and invites, househelps, categories (CRUD and reorder), schedules | next |
-| 3 | Attendance (one-tap), calendar, analytics | |
+| 2 | Members and invites, househelps, categories (CRUD and reorder), schedules | ✅ |
+| 3 | Attendance (one-tap), calendar, analytics | next |
 | 4 | Checklist tasks, assignments, completion | |
 | 5 | Salary calculation, settlement, payments | |
 | 6 | Bills, recurrence engine, occurrences, partial payments | |

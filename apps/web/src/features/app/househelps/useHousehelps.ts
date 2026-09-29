@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { CategoryDTO, CreateCategoryInput, CreateHousehelpInput, HousehelpDTO, MoveCategoryInput, UpdateCategoryInput, UpdateHousehelpInput } from "@household/shared";
-import { del, get, patch, post } from "../../../lib/api";
+import type { CategoryDTO, CreateCategoryInput, CreateHousehelpInput, HousehelpDTO, MoveCategoryInput, ScheduleDTO, UpdateCategoryInput, UpdateHousehelpInput, UpdateScheduleInput } from "@household/shared";
+import { del, get, patch, post, put } from "../../../lib/api";
 
 export function useCategories(householdId: string | undefined) {
   return useQuery({
@@ -95,5 +95,21 @@ export function useUnarchiveHousehelp(householdId: string) {
   return useMutation({
     mutationFn: (id: string) => post<null>(`/households/${householdId}/househelps/${id}/unarchive`),
     onSuccess: (_data, id) => invalidateHousehelpQueries(qc, householdId, id),
+  });
+}
+
+export function useSchedule(householdId: string | undefined, househelpId: string | undefined) {
+  return useQuery({
+    queryKey: ["schedule", householdId, househelpId],
+    queryFn: ({ signal }) => get<ScheduleDTO | null>(`/households/${householdId}/househelps/${househelpId}/schedule`, signal).then((r) => r.data),
+    enabled: !!householdId && !!househelpId,
+  });
+}
+
+export function useUpdateSchedule(householdId: string, househelpId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: UpdateScheduleInput) => put<ScheduleDTO>(`/households/${householdId}/househelps/${househelpId}/schedule`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["schedule", householdId, househelpId] }),
   });
 }

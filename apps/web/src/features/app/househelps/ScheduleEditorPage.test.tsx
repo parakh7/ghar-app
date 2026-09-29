@@ -1,0 +1,45 @@
+import { describe, expect, it, vi, beforeEach } from "vitest";
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { meKey } from "../../auth/session";
+import { ScheduleEditorPage } from "./ScheduleEditorPage";
+
+const HOUSEHOLD = { id: "h1", name: "Shah Family", timezone: "Asia/Kolkata", role: "OWNER" as const, memberCount: 2 };
+
+function jsonResponse(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+}
+
+function renderPage() {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  qc.setQueryData(meKey, { user: { id: "u1", name: "Parakh", email: "p@example.com", emailVerified: true, createdAt: "2026-01-01T00:00:00.000Z" }, households: [HOUSEHOLD] });
+  return render(
+    <QueryClientProvider client={qc}>
+      <MemoryRouter initialEntries={["/househelps/hh1/schedule"]}>
+        <Routes><Route path="/househelps/:id/schedule" element={<ScheduleEditorPage />} /></Routes>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+}
+
+describe("ScheduleEditorPage", () => {
+  beforeEach(() => { vi.restoreAllMocks(); });
+
+  it("toggles weekday chips and saves via PUT", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/households/h1")) return jsonResponse({ success: true, data: { ...HOUSEHOLD, permissions: ["househelps.manage"] }, message: null });
+      if (init?.method === "PUT") return jsonResponse({ success: true, data: { id: "s1", weekdays: [1], startTime: null, endTime: null, effectiveFrom: "2026-09-29" }, message: null });
+      if (url.includes("/schedule")) return jsonResponse({ success: true, data: null, message: null });
+      throw new Error(`unexpected fetch ${url}`);
+    }) as typeof fetch);
+    renderPage();
+    await userEvent.click(await screen.findByRole("button", { name: "Monday" }));
+    await userEvent.click(screen.getByRole("button", { name: "Save schedule" }));
+    const putCall = fetchSpy.mock.calls.find(([, init]) => (init as RequestInit | undefined)?.method === "PUT");
+    expect(putCall).toBeDefined();
+    expect(JSON.parse((putCall![1] as RequestInit).body as string)).toEqual({ weekdays: [1] });
+  });
+});
