@@ -247,7 +247,7 @@ Defaults live in `packages/shared/src/permissions.ts`. Households can grant or r
 
 Tokens are in `apps/web/src/styles/tokens.css`, with light and dark variants. Principles:
 
-- **Neem green** `#1F4D3A` is the primary colour. **Turmeric** `#E3A21A` is reserved for one meaning, "today", so it stays a strong signal.
+- **Terracotta** `#C2410C` is the primary colour. **Ochre gold** `#B8790C` is reserved for one meaning, "today", so it stays a strong signal.
 - **Atkinson Hyperlegible Next** at a 17px base, for senior family members. Inputs are ≥16px to stop iOS zoom-on-focus.
 - 48px touch targets; visible focus rings; `prefers-reduced-motion` respected.
 - Status is always a word or icon **plus** colour, never colour alone.

@@ -10,7 +10,7 @@
 .btn:active:not(:disabled) { transform: scale(0.98); }
 .btn:disabled { cursor: not-allowed; opacity: 0.55; }
 .btn--primary { background: var(--accent-700); color: var(--paper); }
-.btn--primary:hover:not(:disabled) { background: var(--accent-600); }
+.btn--primary:hover:not(:disabled) { background: var(--accent-900); }
 .btn--secondary { background: var(--surface); color: var(--accent-700); border-color: var(--line-strong); }
 .btn--secondary:hover:not(:disabled) { border-color: var(--accent-700); }
 .btn--ghost { background: transparent; color: var(--accent-700); padding: 0 var(--space-3); }
