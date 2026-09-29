@@ -1,11 +1,12 @@
 import { Router } from "express";
-import { createHouseholdSchema, inviteMemberSchema, updateHouseholdSchema, updateMemberSchema } from "@household/shared";
+import { createCategorySchema, createHouseholdSchema, inviteMemberSchema, moveCategorySchema, updateCategorySchema, updateHouseholdSchema, updateMemberSchema } from "@household/shared";
 import { requireAuth } from "../middleware/auth.js";
 import { requireHousehold } from "../middleware/household.js";
 import { inviteLimiter } from "../middleware/rate-limit.js";
 import { parseBody } from "../middleware/validate.js";
 import { ok } from "../lib/respond.js";
 import type { Deps } from "../services/deps.js";
+import * as categories from "../services/category.service.js";
 import * as households from "../services/household.service.js";
 import * as members from "../services/member.service.js";
 
@@ -73,6 +74,31 @@ export function householdRoutes(deps: Deps): Router {
 
   r.post("/:householdId/invites/:inviteId/resend", requireHousehold(deps, "members.manage"), limiter, async (req, res) => {
     ok(res, await members.resendInvite(deps, req.auth!.user.id, req.membership!, req.params.inviteId as string, req.ip), 200, "Invite resent.");
+  });
+
+  r.get("/:householdId/categories", requireHousehold(deps, "househelps.view"), async (req, res) => {
+    ok(res, await categories.listCategories(deps.db, req.membership!.householdId));
+  });
+
+  r.post("/:householdId/categories", requireHousehold(deps, "categories.manage"), async (req, res) => {
+    const input = parseBody(req, createCategorySchema);
+    ok(res, await categories.createCategory(deps, req.auth!.user.id, req.membership!.householdId, input, req.ip), 201, "Category added.");
+  });
+
+  r.patch("/:householdId/categories/:categoryId", requireHousehold(deps, "categories.manage"), async (req, res) => {
+    const patch = parseBody(req, updateCategorySchema);
+    ok(res, await categories.updateCategory(deps, req.auth!.user.id, req.membership!.householdId, req.params.categoryId as string, patch, req.ip), 200, "Category updated.");
+  });
+
+  r.delete("/:householdId/categories/:categoryId", requireHousehold(deps, "categories.manage"), async (req, res) => {
+    await categories.softDeleteCategory(deps, req.auth!.user.id, req.membership!.householdId, req.params.categoryId as string, req.ip);
+    ok(res, null, 200, "Category removed.");
+  });
+
+  r.post("/:householdId/categories/:categoryId/move", requireHousehold(deps, "categories.manage"), async (req, res) => {
+    const { direction } = parseBody(req, moveCategorySchema);
+    await categories.moveCategory(deps, req.auth!.user.id, req.membership!.householdId, req.params.categoryId as string, direction, req.ip);
+    ok(res, null, 200, "Category moved.");
   });
 
   return r;
