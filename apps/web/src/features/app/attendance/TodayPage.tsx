@@ -27,19 +27,32 @@ export function TodayPage() {
   const canMark = householdQuery.data?.permissions.includes("attendance.mark") ?? false;
   const [openFor, setOpenFor] = useState<string | null>(null);
   const [pageError, setPageError] = useState<string | null>(null);
+  const [poppedId, setPoppedId] = useState<string | null>(null);
 
   if (!householdId || !todayQuery.data) return null;
   const { date, entries } = todayQuery.data;
 
   function onTap(househelpId: string, current: AttendanceStatus | null) {
     const next: AttendanceStatus = current === "PRESENT" ? "ABSENT" : "PRESENT";
-    setAttendance.mutate({ househelpId, body: { date, status: next } }, { onError: (err) => setPageError(messageFrom(err)) });
+    setAttendance.mutate(
+      { househelpId, body: { date, status: next } },
+      { onSuccess: () => setPoppedId(househelpId), onError: (err) => setPageError(messageFrom(err)) },
+    );
   }
 
   function onPick(househelpId: string, status: AttendanceStatus | null) {
     setOpenFor(null);
-    if (status === null) clearAttendance.mutate({ househelpId, date }, { onError: (err) => setPageError(messageFrom(err)) });
-    else setAttendance.mutate({ househelpId, body: { date, status } }, { onError: (err) => setPageError(messageFrom(err)) });
+    if (status === null) {
+      clearAttendance.mutate(
+        { househelpId, date },
+        { onSuccess: () => setPoppedId(househelpId), onError: (err) => setPageError(messageFrom(err)) },
+      );
+    } else {
+      setAttendance.mutate(
+        { househelpId, body: { date, status } },
+        { onSuccess: () => setPoppedId(househelpId), onError: (err) => setPageError(messageFrom(err)) },
+      );
+    }
   }
 
   function onMarkHoliday() {
@@ -80,7 +93,12 @@ export function TodayPage() {
                 <span className="list__label" style={{ display: "block" }}>{e.name}{!e.scheduledToday && " (not scheduled today)"}</span>
                 <span className="list__meta">{e.roleTitle ?? "Househelp"}</span>
               </button>
-              <span className={`badge badge--${toneOf(e.status)}`}>{e.status ? STATUS_LABEL[e.status] : "Not marked"}</span>
+              <span
+                className={`badge badge--${toneOf(e.status)}${poppedId === e.househelpId ? " pop-in" : ""}`}
+                onAnimationEnd={() => setPoppedId((id) => (id === e.househelpId ? null : id))}
+              >
+                {e.status ? STATUS_LABEL[e.status] : "Not marked"}
+              </span>
               {canMark && <Button variant="ghost" onClick={() => setOpenFor(openFor === e.househelpId ? null : e.househelpId)}>More</Button>}
             </div>
             {openFor === e.househelpId && (
