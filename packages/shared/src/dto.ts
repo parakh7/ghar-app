@@ -29,3 +29,16 @@ export type HousehelpDTO = {
 };
 
 export type ScheduleDTO = { id: string; weekdays: number[]; startTime: string | null; endTime: string | null; effectiveFrom: string };
+
+export type AttendanceStatus = "PRESENT" | "ABSENT" | "HALF_DAY" | "LEAVE" | "HOLIDAY";
+
+export type AttendanceRecordDTO = { date: string; status: AttendanceStatus; note: string | null };
+
+export type TodayAttendanceEntryDTO = {
+  househelpId: string; name: string; roleTitle: string | null;
+  scheduledToday: boolean; status: AttendanceStatus | null; note: string | null;
+};
+
+export type TodayAttendanceDTO = { date: string; entries: TodayAttendanceEntryDTO[] };
+
+export type MarkHolidayResultDTO = { date: string; count: number };

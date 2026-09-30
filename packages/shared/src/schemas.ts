@@ -102,3 +102,16 @@ export type MoveCategoryInput = z.infer<typeof moveCategorySchema>;
 export type CreateHousehelpInput = z.input<typeof createHousehelpSchema>;
 export type UpdateHousehelpInput = z.infer<typeof updateHousehelpSchema>;
 export type UpdateScheduleInput = z.infer<typeof updateScheduleSchema>;
+
+export const attendanceStatusSchema = z.enum(["PRESENT", "ABSENT", "HALF_DAY", "LEAVE", "HOLIDAY"]);
+export const monthSchema = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Use YYYY-MM");
+
+export const markAttendanceSchema = z.object({
+  date: dateSchema,
+  status: attendanceStatusSchema,
+  note: z.string().trim().max(500).optional(),
+});
+export const markHolidaySchema = z.object({ date: dateSchema });
+
+export type MarkAttendanceInput = z.infer<typeof markAttendanceSchema>;
+export type MarkHolidayInput = z.infer<typeof markHolidaySchema>;
