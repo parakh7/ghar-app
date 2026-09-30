@@ -1,15 +1,18 @@
 /* Design tokens — the single source for colour, type, space and motion. */
 :root {
   --font: "Atkinson Hyperlegible Next", "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-display: "Fraunces", Georgia, serif;
 
-  /* palette */
-  --accent-900: #7A2708;
-  --accent-700: #C2410C;   /* primary */
-  --accent-600: #D6551F;
-  --accent-100: #F5DDD0;
-  --accent-50:  #FBEEE6;
-  --today-500: #B8790C;  /* reserved for "today" */
-  --today-100: #F6E6C6;
+  /* palette — "Sunrise": violet-dusk to coral to amber */
+  --accent-900: #7A2B1D;
+  --accent-700: #C8452F;   /* primary */
+  --accent-600: #E85D4A;
+  --accent-100: #FBDCD4;
+  --accent-50:  #FEF6F1;
+  --today-500: #D67D1F;  /* "today" marker, and the gradient's warm end */
+  --today-100: #FDEED7;
+  --dusk: #4A3B72;        /* gradient's cool end — decorative only, never body text */
+  --hero-gradient: linear-gradient(155deg, var(--dusk) 0%, var(--accent-600) 58%, var(--today-500) 100%);
   --paper: #FAF7F2;
   --surface: #FFFFFF;
   --ink: #2D2A26;
@@ -42,6 +45,7 @@
   --touch: 48px;      /* ≥44px minimum target */
 
   --shadow-sheet: 0 -8px 32px rgba(45, 42, 26, 0.14);
+  --shadow-hero: 0 20px 50px -18px rgba(74, 59, 114, 0.35);
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
   --dur: 180ms;
 
@@ -56,13 +60,14 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --accent-700: #E68A5C;
-    --accent-600: #EF9B70;
-    --accent-900: #F5CDB5;
-    --accent-100: #3D2A1F;
-    --accent-50: #2E211A;
-    --today-500: #D9A441;
-    --today-100: #3D3016;
+    --accent-700: #F0846B;
+    --accent-600: #F5987F;
+    --accent-900: #FBD8CB;
+    --accent-100: #3A2621;
+    --accent-50: #2E1D19;
+    --today-500: #FBC067;
+    --today-100: #3D2E16;
+    --dusk: #9686CC;
     --paper: #1C1815;
     --surface: #241F1A;
     --ink: #F3EDE4;
@@ -75,6 +80,7 @@
     --ok: #7FD6A0;       --ok-bg: #133222;
     --info: #8CC4F0;     --info-bg: #122838;
     --shadow-sheet: 0 -8px 32px rgba(0, 0, 0, 0.5);
+    --shadow-hero: 0 20px 50px -16px rgba(150, 134, 204, 0.3);
     color-scheme: dark;
   }
 }
