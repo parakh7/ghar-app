@@ -130,6 +130,27 @@ describe("attendance — today marking", () => {
     expect(again.status).toBe(200);
   });
 
+  it("rejects clearing a future date and requires editHistory for a past date", async () => {
+    const owner = await signupUser(ctx);
+    const member = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    await addMember(h.id, member.id, "MEMBER");
+    const help = await createHousehelp(ctx, owner.cookie, h.id);
+    const future = await ctx.request.delete(`/api/households/${h.id}/attendance/${help.id}?date=2026-09-30`).set(csrf).set("cookie", owner.cookie);
+    expect(future.status).toBe(400);
+    const memberPast = await ctx.request.delete(`/api/households/${h.id}/attendance/${help.id}?date=2026-09-28`).set(csrf).set("cookie", member.cookie);
+    expect(memberPast.status).toBe(403);
+    const ownerPast = await ctx.request.delete(`/api/households/${h.id}/attendance/${help.id}?date=2026-09-28`).set(csrf).set("cookie", owner.cookie);
+    expect(ownerPast.status).toBe(200);
+  });
+
+  it("rejects a malformed date query param on the today endpoint", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    const res = await ctx.request.get(`/api/households/${h.id}/attendance/today?date=not-a-date`).set("cookie", owner.cookie);
+    expect(res.status).toBe(400);
+  });
+
   it("a member of household A cannot mark attendance for household B's househelp", async () => {
     const alice = await signupUser(ctx);
     const bob = await signupUser(ctx);
@@ -175,6 +196,8 @@ describe("attendance — bulk holiday", () => {
     expect(memberPast.status).toBe(403);
     const ownerPast = await ctx.request.post(`/api/households/${h.id}/attendance/holiday`).set(csrf).set("cookie", owner.cookie).send({ date: "2026-09-28" });
     expect(ownerPast.status).toBe(200);
+    const logs = await ctx.db.select().from(auditLogs).where(and(eq(auditLogs.householdId, h.id), eq(auditLogs.action, "attendance.holidayMarked")));
+    expect(logs).toHaveLength(1);
   });
 });
 

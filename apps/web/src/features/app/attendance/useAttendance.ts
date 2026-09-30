@@ -13,7 +13,7 @@ export function useTodayAttendance(householdId: string | undefined) {
 function invalidateAttendance(qc: ReturnType<typeof useQueryClient>, householdId: string, househelpId?: string) {
   return Promise.all([
     qc.invalidateQueries({ queryKey: ["attendance", "today", householdId] }),
-    ...(househelpId ? [qc.invalidateQueries({ queryKey: ["attendance", "month", householdId, househelpId] })] : []),
+    qc.invalidateQueries({ queryKey: househelpId ? ["attendance", "month", householdId, househelpId] : ["attendance", "month", householdId] }),
   ]);
 }
 

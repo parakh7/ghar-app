@@ -59,7 +59,9 @@ export function HousehelpCalendarPage() {
   const [openDate, setOpenDate] = useState<string | null>(null);
   const [pageError, setPageError] = useState<string | null>(null);
 
-  if (!householdId || !id || !househelpQuery.data) return null;
+  if (!householdId || !id) return null;
+  if (househelpQuery.isPending) return <p>Loading…</p>;
+  if (!househelpQuery.data) return null;
 
   const today = dateInZone(new Date(), active?.timezone ?? "Asia/Kolkata");
   const [year, m] = month.split("-").map(Number);
@@ -69,7 +71,8 @@ export function HousehelpCalendarPage() {
   const scheduledWeekdays = new Set(scheduleQuery.data?.weekdays ?? []);
 
   function canEditDate(d: string): boolean {
-    return d === today ? canMarkToday : canEditHistory;
+    if (d > today) return false;
+    return d === today ? canMarkToday : canMarkToday && canEditHistory;
   }
 
   function onPick(d: string, status: AttendanceStatus | null) {

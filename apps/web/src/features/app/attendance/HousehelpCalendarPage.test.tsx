@@ -49,7 +49,7 @@ describe("HousehelpCalendarPage", () => {
 
   it("renders the marked day and opens the picker to post a correction on a past day", async () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch");
-    renderPage(["attendance.view", "attendance.editHistory"]);
+    renderPage(["attendance.view", "attendance.mark", "attendance.editHistory"]);
     await screen.findByText("Sunita's attendance");
     const day15 = await screen.findByRole("button", { name: "15" });
     await userEvent.click(day15);
@@ -74,5 +74,14 @@ describe("HousehelpCalendarPage", () => {
     await userEvent.click(screen.getByRole("button", { name: "Next" }));
     await screen.findByText("October 2026");
     expect(fetchSpy.mock.calls.some(([u]) => String(u).includes("/attendance?month=2026-10"))).toBe(true);
+  });
+
+  it("disables every day in a future month", async () => {
+    renderPage(["attendance.view", "attendance.editHistory"]);
+    await screen.findByText("September 2026");
+    await userEvent.click(screen.getByRole("button", { name: "Next" }));
+    await screen.findByText("October 2026");
+    const day1 = await screen.findByRole("button", { name: "1" });
+    expect(day1).toBeDisabled();
   });
 });

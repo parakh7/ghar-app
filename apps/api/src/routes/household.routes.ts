@@ -143,7 +143,12 @@ export function householdRoutes(deps: Deps): Router {
   });
 
   r.get("/:householdId/attendance/today", requireHousehold(deps, "attendance.view"), async (req, res) => {
-    const dateParam = typeof req.query.date === "string" ? req.query.date : undefined;
+    let dateParam: string | undefined;
+    if (req.query.date !== undefined) {
+      const parsed = dateSchema.safeParse(req.query.date);
+      if (!parsed.success) throw Errors.validation({ date: "Use YYYY-MM-DD" });
+      dateParam = parsed.data;
+    }
     ok(res, await attendance.getToday(deps, req.membership!, dateParam));
   });
 
