@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { auditLogs, checklistTasks, householdMembers, househelpCategories } from "../src/db/schema.js";
+import { auditLogs, checklistAssignments, checklistTasks, householdMembers, househelpCategories, househelps } from "../src/db/schema.js";
 import { createTestContext, csrf, signupUser, truncateAll, type TestContext } from "./helpers.js";
 
 const ctx = createTestContext();
@@ -19,6 +19,12 @@ async function addMember(householdId: string, userId: string, role: "OWNER" | "A
 
 async function createTask(c: TestContext, cookie: string, householdId: string, body: Record<string, unknown> = { name: "Sweep floors", frequency: "DAILY" }) {
   const res = await c.request.post(`/api/households/${householdId}/checklist-tasks`).set(csrf).set("cookie", cookie).send(body);
+  expect(res.status).toBe(201);
+  return res.body.data as { id: string };
+}
+
+async function createHousehelp(c: TestContext, cookie: string, householdId: string, name = "Sunita") {
+  const res = await c.request.post(`/api/households/${householdId}/househelps`).set(csrf).set("cookie", cookie).send({ name });
   expect(res.status).toBe(201);
   return res.body.data as { id: string };
 }
@@ -160,5 +166,95 @@ describe("checklist tasks", () => {
     const b = await createHousehold(ctx, bob.cookie, "B");
     const res = await ctx.request.post(`/api/households/${b.id}/checklist-tasks`).set(csrf).set("cookie", alice.cookie).send({ name: "X", frequency: "DAILY" });
     expect(res.status).toBe(404);
+  });
+});
+
+describe("checklist assignments", () => {
+  it("returns an empty set for a task with no assignments yet", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    const task = await createTask(ctx, owner.cookie, h.id);
+    const res = await ctx.request.get(`/api/households/${h.id}/checklist-tasks/${task.id}/assignments`).set("cookie", owner.cookie);
+    expect(res.status).toBe(200);
+    expect(res.body.data).toEqual([]);
+  });
+
+  it("assigns one househelp, then adds a second while keeping the first", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    const task = await createTask(ctx, owner.cookie, h.id);
+    const sunita = await createHousehelp(ctx, owner.cookie, h.id, "Sunita");
+    const ramesh = await createHousehelp(ctx, owner.cookie, h.id, "Ramesh");
+
+    const first = await ctx.request.put(`/api/households/${h.id}/checklist-tasks/${task.id}/assignments`).set(csrf).set("cookie", owner.cookie).send({ househelpIds: [sunita.id] });
+    expect(first.status).toBe(200);
+    expect(first.body.data).toEqual([sunita.id]);
+
+    ctx.clock.advance(3 * 86_400_000);
+    const second = await ctx.request.put(`/api/households/${h.id}/checklist-tasks/${task.id}/assignments`).set(csrf).set("cookie", owner.cookie).send({ househelpIds: [sunita.id, ramesh.id] });
+    expect(second.status).toBe(200);
+    expect(second.body.data.sort()).toEqual([sunita.id, ramesh.id].sort());
+  });
+
+  it("removing an assignee closes their row instead of deleting history, once it's from a prior day", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    const task = await createTask(ctx, owner.cookie, h.id);
+    const sunita = await createHousehelp(ctx, owner.cookie, h.id, "Sunita");
+    await ctx.request.put(`/api/households/${h.id}/checklist-tasks/${task.id}/assignments`).set(csrf).set("cookie", owner.cookie).send({ househelpIds: [sunita.id] });
+
+    ctx.clock.advance(3 * 86_400_000);
+    const res = await ctx.request.put(`/api/households/${h.id}/checklist-tasks/${task.id}/assignments`).set(csrf).set("cookie", owner.cookie).send({ househelpIds: [] });
+    expect(res.status).toBe(200);
+    expect(res.body.data).toEqual([]);
+
+    const rows = await ctx.db.select().from(checklistAssignments).where(eq(checklistAssignments.taskId, task.id));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.effectiveTo).not.toBeNull();
+    expect(rows[0]!.effectiveFrom < rows[0]!.effectiveTo!).toBe(true); // never an inverted range
+  });
+
+  it("removing a same-day assignee deletes the row instead of leaving an inverted range", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    const task = await createTask(ctx, owner.cookie, h.id);
+    const sunita = await createHousehelp(ctx, owner.cookie, h.id, "Sunita");
+    await ctx.request.put(`/api/households/${h.id}/checklist-tasks/${task.id}/assignments`).set(csrf).set("cookie", owner.cookie).send({ househelpIds: [sunita.id] });
+    const res = await ctx.request.put(`/api/households/${h.id}/checklist-tasks/${task.id}/assignments`).set(csrf).set("cookie", owner.cookie).send({ househelpIds: [] });
+    expect(res.status).toBe(200);
+    const rows = await ctx.db.select().from(checklistAssignments).where(eq(checklistAssignments.taskId, task.id));
+    expect(rows).toHaveLength(0);
+  });
+
+  it("rejects a househelp id that belongs to another household", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    const task = await createTask(ctx, owner.cookie, h.id);
+    const bob = await signupUser(ctx);
+    const b = await createHousehold(ctx, bob.cookie, "B");
+    const bobsHelp = await createHousehelp(ctx, bob.cookie, b.id);
+    const res = await ctx.request.put(`/api/households/${h.id}/checklist-tasks/${task.id}/assignments`).set(csrf).set("cookie", owner.cookie).send({ househelpIds: [bobsHelp.id] });
+    expect(res.status).toBe(400);
+  });
+
+  it("audits an assignment change", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    const task = await createTask(ctx, owner.cookie, h.id);
+    const sunita = await createHousehelp(ctx, owner.cookie, h.id, "Sunita");
+    await ctx.request.put(`/api/households/${h.id}/checklist-tasks/${task.id}/assignments`).set(csrf).set("cookie", owner.cookie).send({ househelpIds: [sunita.id] });
+    const [log] = await ctx.db.select().from(auditLogs).where(and(eq(auditLogs.householdId, h.id), eq(auditLogs.action, "checklist_task.assignmentsChanged")));
+    expect(log).toMatchObject({ newValue: { househelpIds: [sunita.id] } });
+  });
+
+  it("MEMBER can view assignments but not change them", async () => {
+    const owner = await signupUser(ctx);
+    const member = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    await addMember(h.id, member.id, "MEMBER");
+    const task = await createTask(ctx, owner.cookie, h.id);
+    expect((await ctx.request.get(`/api/households/${h.id}/checklist-tasks/${task.id}/assignments`).set("cookie", member.cookie)).status).toBe(200);
+    const res = await ctx.request.put(`/api/households/${h.id}/checklist-tasks/${task.id}/assignments`).set(csrf).set("cookie", member.cookie).send({ househelpIds: [] });
+    expect(res.status).toBe(403);
   });
 });

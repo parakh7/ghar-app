@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { createCategorySchema, createChecklistTaskSchema, createHousehelpSchema, createHouseholdSchema, dateSchema, inviteMemberSchema, markAttendanceSchema, markHolidaySchema, monthSchema, moveCategorySchema, updateCategorySchema, updateChecklistTaskSchema, updateHousehelpSchema, updateHouseholdSchema, updateMemberSchema, updateScheduleSchema } from "@household/shared";
+import { createCategorySchema, createChecklistTaskSchema, createHousehelpSchema, createHouseholdSchema, dateSchema, inviteMemberSchema, markAttendanceSchema, markHolidaySchema, monthSchema, moveCategorySchema, putAssignmentsSchema, updateCategorySchema, updateChecklistTaskSchema, updateHousehelpSchema, updateHouseholdSchema, updateMemberSchema, updateScheduleSchema } from "@household/shared";
 import { requireAuth } from "../middleware/auth.js";
 import { requireHousehold } from "../middleware/household.js";
 import { inviteLimiter } from "../middleware/rate-limit.js";
@@ -9,6 +9,7 @@ import { Errors } from "../lib/errors.js";
 import type { Deps } from "../services/deps.js";
 import * as attendance from "../services/attendance.service.js";
 import * as categories from "../services/category.service.js";
+import * as checklistAssignments from "../services/checklist-assignment.service.js";
 import * as checklistTasks from "../services/checklist-task.service.js";
 import * as households from "../services/household.service.js";
 import * as househelps from "../services/househelp.service.js";
@@ -208,6 +209,15 @@ export function householdRoutes(deps: Deps): Router {
     const { direction } = parseBody(req, moveCategorySchema);
     await checklistTasks.moveChecklistTask(deps, req.auth!.user.id, req.membership!.householdId, req.params.id as string, direction, req.ip);
     ok(res, null, 200, "Checklist task moved.");
+  });
+
+  r.get("/:householdId/checklist-tasks/:id/assignments", requireHousehold(deps, "checklists.view"), async (req, res) => {
+    ok(res, await checklistAssignments.getCurrentAssignments(deps, req.membership!, req.params.id as string));
+  });
+
+  r.put("/:householdId/checklist-tasks/:id/assignments", requireHousehold(deps, "checklists.manage"), async (req, res) => {
+    const { househelpIds } = parseBody(req, putAssignmentsSchema);
+    ok(res, await checklistAssignments.putAssignments(deps, req.auth!.user.id, req.membership!, req.params.id as string, househelpIds, req.ip), 200, "Assignments updated.");
   });
 
   return r;
