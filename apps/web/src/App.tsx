@@ -6,6 +6,7 @@ import { SignInPage } from "./features/auth/SignInPage";
 import { SignUpPage } from "./features/auth/SignUpPage";
 import { VerifyEmailPage } from "./features/auth/VerifyEmailPage";
 import { AppShell } from "./features/app/AppShell";
+import { TodayPage } from "./features/app/attendance/TodayPage";
 import { ComingSoonPage } from "./features/app/ComingSoonPage";
 import { RedirectIfSignedIn, RequireAuth } from "./features/app/guards";
 import { HomePage } from "./features/app/HomePage";
@@ -33,6 +34,7 @@ export function App() {
       <Route element={<RequireAuth><AppShell /></RequireAuth>}>
         <Route index element={<HomePage />} />
         <Route path="househelps" element={<HousehelpsListPage />} />
+        <Route path="attendance" element={<TodayPage />} />
         <Route path="househelps/categories" element={<CategoriesPage />} />
         <Route path="househelps/new" element={<HousehelpFormPage mode="create" />} />
         <Route path="househelps/:id" element={<HousehelpDetailPage />} />

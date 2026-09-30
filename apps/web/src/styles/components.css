@@ -69,3 +69,8 @@
 /* ── Badge ──────────────────────────────────────────── */
 .badge { white-space: nowrap; flex: none; display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: var(--text-xs); font-weight: 700; }
 .badge--neutral { background: var(--accent-50); color: var(--accent-700); }
+.badge--ok { background: var(--ok-bg); color: var(--ok); }
+.badge--overdue { background: var(--overdue-bg); color: var(--overdue); }
+.badge--due-soon { background: var(--due-soon-bg); color: var(--due-soon); }
+.badge--info { background: var(--info-bg); color: var(--info); }
+.badge--muted { background: var(--line); color: var(--ink-3); }

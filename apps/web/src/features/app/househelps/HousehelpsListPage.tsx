@@ -45,7 +45,10 @@ export function HousehelpsListPage() {
         <button type="button" className="chip" aria-pressed={showArchived} onClick={() => setShowArchived((v) => !v)}>
           {showArchived ? "Showing archived" : "Show archived"}
         </button>
-        {canManageCategories && <Link to="/househelps/categories" className="list__label">Manage categories</Link>}
+        <div style={{ display: "flex", gap: "var(--space-4)" }}>
+          <Link to="/attendance" className="list__label">Today's attendance</Link>
+          {canManageCategories && <Link to="/househelps/categories" className="list__label">Manage categories</Link>}
+        </div>
       </div>
 
       {househelps.length === 0 && (
