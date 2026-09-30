@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { auditLogs, checklistAssignments, checklistTasks, householdMembers, househelpCategories, househelps } from "../src/db/schema.js";
+import { auditLogs, checklistAssignments, checklistTasks, householdMembers } from "../src/db/schema.js";
 import { createTestContext, csrf, signupUser, truncateAll, type TestContext } from "./helpers.js";
 
 const ctx = createTestContext();
