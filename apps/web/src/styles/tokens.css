@@ -9,7 +9,7 @@
   --accent-600: #E85D4A;
   --accent-100: #FBDCD4;
   --accent-50:  #FEF6F1;
-  --today-500: #D67D1F;  /* "today" marker, and the gradient's warm end */
+  --today-500: #CE7D0B;  /* "today" marker, and the gradient's warm end */
   --today-100: #FDEED7;
   --dusk: #4A3B72;        /* gradient's cool end — decorative only, never body text */
   --hero-gradient: linear-gradient(155deg, var(--dusk) 0%, var(--accent-600) 58%, var(--today-500) 100%);
