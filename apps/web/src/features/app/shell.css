@@ -49,13 +49,28 @@
 .page-sub { color: var(--ink-2); margin-top: var(--space-1); }
 .stack { display: grid; gap: var(--space-4); }
 
-/* home "today" header */
-.today { display: grid; gap: var(--space-2); margin-bottom: var(--space-8); }
-.today__greet { color: var(--ink-2); font-weight: 500; }
-.today__date { font-size: var(--text-3xl); font-weight: 800; letter-spacing: -0.03em; line-height: 1.05; }
-.today__date mark { background: none; color: inherit; box-shadow: inset 0 -0.28em 0 var(--today-100); padding: 0 0.04em; }
-.today__stamp { display: inline-flex; align-items: center; gap: 6px; font-size: var(--text-sm); font-weight: 700; color: var(--ink-2); }
-.today__dot { width: 10px; height: 10px; border-radius: 50%; background: var(--today-500); }
+/* home "today" header — the Sunrise gradient hero */
+.today {
+  display: grid; gap: var(--space-2); margin-bottom: var(--space-8);
+  background: var(--hero-gradient); background-size: 160% 160%;
+  border-radius: var(--radius-lg); padding: var(--space-6) var(--space-5);
+  color: #fff; box-shadow: var(--shadow-hero);
+  animation: hero-drift 14s ease-in-out infinite alternate;
+}
+.today__greet { color: rgba(255, 255, 255, 0.85); font-weight: 500; }
+.today__date {
+  font-family: var(--font-display); font-size: var(--text-3xl); font-weight: 700;
+  letter-spacing: -0.01em; line-height: 1.08; text-wrap: balance;
+}
+.today__date mark { background: none; color: inherit; box-shadow: inset 0 -0.28em 0 rgba(255, 255, 255, 0.35); padding: 0 0.04em; }
+.today__stamp {
+  display: inline-flex; align-items: center; gap: 6px; font-size: var(--text-sm); font-weight: 700;
+  color: rgba(255, 255, 255, 0.9); background: rgba(255, 255, 255, 0.16);
+  padding: var(--space-1) var(--space-3) var(--space-1) var(--space-2); border-radius: 999px; width: fit-content;
+}
+.today__dot { width: 8px; height: 8px; border-radius: 50%; background: #fff; }
+
+@keyframes hero-drift { from { background-position: 0% 30%; } to { background-position: 100% 70%; } }
 
 /* chips */
 .chips { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: calc(-1 * var(--space-2)); }

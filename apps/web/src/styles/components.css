@@ -86,3 +86,7 @@
 .cal__day--info { background: var(--info-bg); color: var(--info); }
 .cal__day--neutral { background: var(--accent-50); color: var(--accent-700); }
 .cal__day--muted { background: var(--surface); color: var(--ink-3); }
+
+/* ── Card entrance (opt-in — applied per-page, not baked into the base .card rule) ── */
+.card--enter { animation: fade-up 420ms var(--ease) both; }
+@keyframes fade-up { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
