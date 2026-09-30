@@ -42,3 +42,14 @@ export type TodayAttendanceEntryDTO = {
 export type TodayAttendanceDTO = { date: string; entries: TodayAttendanceEntryDTO[] };
 
 export type MarkHolidayResultDTO = { date: string; count: number };
+
+export type TaskFrequency = "DAILY" | "WEEKLY" | "WEEKDAYS" | "MONTHLY" | "SPECIFIC_DATE" | "CUSTOM";
+export type TaskPriority = "LOW" | "NORMAL" | "HIGH";
+
+export type ChecklistTaskDTO = {
+  id: string; name: string; description: string | null; categoryId: string | null;
+  frequency: TaskFrequency; weekdays: number[] | null; dayOfMonth: number | null;
+  specificDate: string | null; intervalDays: number | null; anchorDate: string | null;
+  preferredTime: string | null; priority: TaskPriority; sortOrder: number;
+  isActive: boolean; archivedAt: string | null; createdAt: string;
+};

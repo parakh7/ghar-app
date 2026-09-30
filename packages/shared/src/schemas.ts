@@ -115,3 +115,91 @@ export const markHolidaySchema = z.object({ date: dateSchema });
 
 export type MarkAttendanceInput = z.infer<typeof markAttendanceSchema>;
 export type MarkHolidayInput = z.infer<typeof markHolidaySchema>;
+
+export const taskFrequencySchema = z.enum(["DAILY", "WEEKLY", "WEEKDAYS", "MONTHLY", "SPECIFIC_DATE", "CUSTOM"]);
+export const taskPrioritySchema = z.enum(["LOW", "NORMAL", "HIGH"]);
+
+type FrequencyConfigFields = {
+  weekdays?: number[]; dayOfMonth?: number; specificDate?: string; intervalDays?: number; anchorDate?: string;
+};
+
+/**
+ * Each frequency accepts exactly its own config fields and rejects the others — an inapplicable
+ * field left populated would make "is this task due today" (a later spec) ambiguous. WEEKDAYS takes
+ * no input at all: it's a fixed Mon–Fri set the service stores canonically, never client-supplied.
+ */
+function checkFrequencyConfig(v: { frequency: z.infer<typeof taskFrequencySchema> } & FrequencyConfigFields, ctx: z.RefinementCtx): void {
+  const has = {
+    weekdays: v.weekdays !== undefined, dayOfMonth: v.dayOfMonth !== undefined,
+    specificDate: v.specificDate !== undefined, intervalDays: v.intervalDays !== undefined, anchorDate: v.anchorDate !== undefined,
+  };
+  const reject = (field: keyof typeof has) => { if (has[field]) ctx.addIssue({ code: "custom", path: [field], message: `Not used for a ${v.frequency} task.` }); };
+  const rejectAllExcept = (...allowed: (keyof typeof has)[]) => {
+    (Object.keys(has) as (keyof typeof has)[]).forEach((f) => { if (!allowed.includes(f)) reject(f); });
+  };
+  switch (v.frequency) {
+    case "DAILY":
+    case "WEEKDAYS":
+      rejectAllExcept();
+      break;
+    case "WEEKLY":
+      rejectAllExcept("weekdays");
+      if (!v.weekdays || v.weekdays.length === 0) ctx.addIssue({ code: "custom", path: ["weekdays"], message: "Pick at least one weekday for a weekly task." });
+      else if (new Set(v.weekdays).size !== v.weekdays.length) ctx.addIssue({ code: "custom", path: ["weekdays"], message: "No duplicate days." });
+      break;
+    case "MONTHLY":
+      rejectAllExcept("dayOfMonth");
+      if (!has.dayOfMonth) ctx.addIssue({ code: "custom", path: ["dayOfMonth"], message: "Give the day of the month for a monthly task." });
+      break;
+    case "SPECIFIC_DATE":
+      rejectAllExcept("specificDate");
+      if (!has.specificDate) ctx.addIssue({ code: "custom", path: ["specificDate"], message: "Give the date for a one-time task." });
+      break;
+    case "CUSTOM":
+      rejectAllExcept("intervalDays", "anchorDate");
+      if (!has.intervalDays) ctx.addIssue({ code: "custom", path: ["intervalDays"], message: "Give the repeat interval in days." });
+      if (!has.anchorDate) ctx.addIssue({ code: "custom", path: ["anchorDate"], message: "Give the anchor date to count the interval from." });
+      break;
+  }
+}
+
+export const createChecklistTaskSchema = z.object({
+  name: z.string().trim().min(1, "Give the task a name").max(120),
+  description: z.string().trim().max(2000).optional(),
+  categoryId: z.string().uuid().optional(),
+  frequency: taskFrequencySchema,
+  weekdays: z.array(z.number().int().min(1).max(7)).optional(),
+  dayOfMonth: z.number().int().min(1).max(31).optional(),
+  specificDate: dateSchema.optional(),
+  intervalDays: z.number().int().min(1).optional(),
+  anchorDate: dateSchema.optional(),
+  preferredTime: timeSchema.optional(),
+  priority: taskPrioritySchema.default("NORMAL"),
+}).superRefine(checkFrequencyConfig);
+
+export const updateChecklistTaskSchema = z.object({
+  name: z.string().trim().min(1, "Give the task a name").max(120).optional(),
+  description: z.string().trim().max(2000).nullable().optional(),
+  categoryId: z.string().uuid().nullable().optional(),
+  frequency: taskFrequencySchema.optional(),
+  weekdays: z.array(z.number().int().min(1).max(7)).optional(),
+  dayOfMonth: z.number().int().min(1).max(31).optional(),
+  specificDate: dateSchema.optional(),
+  intervalDays: z.number().int().min(1).optional(),
+  anchorDate: dateSchema.optional(),
+  preferredTime: timeSchema.nullable().optional(),
+  priority: taskPrioritySchema.optional(),
+}).superRefine((v, ctx) => {
+  const configTouched = v.weekdays !== undefined || v.dayOfMonth !== undefined || v.specificDate !== undefined || v.intervalDays !== undefined || v.anchorDate !== undefined;
+  if (v.frequency === undefined) {
+    if (configTouched) ctx.addIssue({ code: "custom", path: ["frequency"], message: "Include frequency when changing its config fields." });
+    return;
+  }
+  checkFrequencyConfig(v as { frequency: z.infer<typeof taskFrequencySchema> } & FrequencyConfigFields, ctx);
+}).refine((v) => Object.values(v).some((x) => x !== undefined), { message: "Provide at least one field to update." });
+
+export const putAssignmentsSchema = z.object({ househelpIds: z.array(z.string().uuid()) });
+
+export type CreateChecklistTaskInput = z.input<typeof createChecklistTaskSchema>;
+export type UpdateChecklistTaskInput = z.infer<typeof updateChecklistTaskSchema>;
+export type PutAssignmentsInput = z.infer<typeof putAssignmentsSchema>;
