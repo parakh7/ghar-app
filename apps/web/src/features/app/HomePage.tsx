@@ -28,19 +28,19 @@ export function HomePage() {
       <div className="stack">
         <section className="card card--enter" style={{ animationDelay: "0ms" }} aria-labelledby="h-help">
           <h2 className="card__title" id="h-help">Househelp</h2>
-          <EmptyState icon={<Users size={22} />} title="No househelps yet" text="Add the people who help at home to track who's coming each day." />
+          <EmptyState icon={<Users size={22} />} title="No househelps yet" text="Add the people who help at home to track who's coming each day." tone="coral" />
         </section>
         <section className="card card--enter" style={{ animationDelay: "70ms" }} aria-labelledby="h-work">
           <h2 className="card__title" id="h-work">Today's work</h2>
-          <EmptyState icon={<ClipboardCheck size={22} />} title="No tasks for today" text="Create a checklist — daily dusting, Saturday bathrooms — and tick things off as they're done." />
+          <EmptyState icon={<ClipboardCheck size={22} />} title="No tasks for today" text="Create a checklist — daily dusting, Saturday bathrooms — and tick things off as they're done." tone="amber" />
         </section>
         <section className="card card--enter" style={{ animationDelay: "140ms" }} aria-labelledby="h-pay">
           <h2 className="card__title" id="h-pay">Payments</h2>
-          <EmptyState icon={<ReceiptIndianRupee size={22} />} title="No bills tracked" text="Keep track of electricity, WiFi, maintenance and more. We'll remind you before they're due." />
+          <EmptyState icon={<ReceiptIndianRupee size={22} />} title="No bills tracked" text="Keep track of electricity, WiFi, maintenance and more. We'll remind you before they're due." tone="dusk" />
         </section>
         <section className="card card--enter" style={{ animationDelay: "210ms" }} aria-labelledby="h-sal">
           <h2 className="card__title" id="h-sal">Salaries</h2>
-          <EmptyState icon={<Wallet size={22} />} title="Nothing due" text="Salaries appear here a few days before they're due." />
+          <EmptyState icon={<Wallet size={22} />} title="Nothing due" text="Salaries appear here a few days before they're due." tone="coral" />
         </section>
       </div>
     </>
