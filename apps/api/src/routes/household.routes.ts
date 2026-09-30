@@ -1,11 +1,13 @@
 import { Router } from "express";
-import { createCategorySchema, createHousehelpSchema, createHouseholdSchema, inviteMemberSchema, moveCategorySchema, updateCategorySchema, updateHousehelpSchema, updateHouseholdSchema, updateMemberSchema, updateScheduleSchema } from "@household/shared";
+import { createCategorySchema, createHousehelpSchema, createHouseholdSchema, dateSchema, inviteMemberSchema, markAttendanceSchema, moveCategorySchema, updateCategorySchema, updateHousehelpSchema, updateHouseholdSchema, updateMemberSchema, updateScheduleSchema } from "@household/shared";
 import { requireAuth } from "../middleware/auth.js";
 import { requireHousehold } from "../middleware/household.js";
 import { inviteLimiter } from "../middleware/rate-limit.js";
 import { parseBody } from "../middleware/validate.js";
 import { ok } from "../lib/respond.js";
+import { Errors } from "../lib/errors.js";
 import type { Deps } from "../services/deps.js";
+import * as attendance from "../services/attendance.service.js";
 import * as categories from "../services/category.service.js";
 import * as households from "../services/household.service.js";
 import * as househelps from "../services/househelp.service.js";
@@ -138,6 +140,23 @@ export function householdRoutes(deps: Deps): Router {
   r.put("/:householdId/househelps/:id/schedule", requireHousehold(deps, "househelps.manage"), async (req, res) => {
     const input = parseBody(req, updateScheduleSchema);
     ok(res, await schedules.putSchedule(deps, req.auth!.user.id, req.membership!, req.params.id as string, input, req.ip), 200, "Schedule updated.");
+  });
+
+  r.get("/:householdId/attendance/today", requireHousehold(deps, "attendance.view"), async (req, res) => {
+    const dateParam = typeof req.query.date === "string" ? req.query.date : undefined;
+    ok(res, await attendance.getToday(deps, req.membership!, dateParam));
+  });
+
+  r.put("/:householdId/attendance/:househelpId", requireHousehold(deps, "attendance.mark"), async (req, res) => {
+    const input = parseBody(req, markAttendanceSchema);
+    ok(res, await attendance.setAttendance(deps, req.auth!.user.id, req.membership!, req.params.househelpId as string, input, req.ip), 200, "Attendance updated.");
+  });
+
+  r.delete("/:householdId/attendance/:househelpId", requireHousehold(deps, "attendance.mark"), async (req, res) => {
+    const parsedDate = dateSchema.safeParse(req.query.date);
+    if (!parsedDate.success) throw Errors.validation({ date: "Use YYYY-MM-DD" });
+    await attendance.clearAttendance(deps, req.auth!.user.id, req.membership!, req.params.househelpId as string, parsedDate.data, req.ip);
+    ok(res, null, 200, "Attendance cleared.");
   });
 
   return r;
