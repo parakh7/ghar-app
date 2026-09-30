@@ -74,3 +74,15 @@
 .badge--due-soon { background: var(--due-soon-bg); color: var(--due-soon); }
 .badge--info { background: var(--info-bg); color: var(--info); }
 .badge--muted { background: var(--line); color: var(--ink-3); }
+
+/* ── Calendar grid ──────────────────────────────────── */
+.cal__grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: var(--space-1); }
+.cal__day { aspect-ratio: 1; min-height: var(--touch); border-radius: var(--radius-sm); border: 1px solid var(--line); font-weight: 700; font-size: var(--text-sm); cursor: pointer; background: var(--surface); color: var(--ink); }
+.cal__day:disabled { cursor: not-allowed; }
+.cal__day--dim { opacity: 0.55; }
+.cal__day--ok { background: var(--ok-bg); color: var(--ok); }
+.cal__day--overdue { background: var(--overdue-bg); color: var(--overdue); }
+.cal__day--due-soon { background: var(--due-soon-bg); color: var(--due-soon); }
+.cal__day--info { background: var(--info-bg); color: var(--info); }
+.cal__day--neutral { background: var(--accent-50); color: var(--accent-700); }
+.cal__day--muted { background: var(--surface); color: var(--ink-3); }

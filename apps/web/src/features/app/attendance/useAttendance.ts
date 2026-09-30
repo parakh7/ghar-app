@@ -42,3 +42,11 @@ export function useMarkHoliday(householdId: string) {
     onSuccess: () => invalidateAttendance(qc, householdId),
   });
 }
+
+export function useMonthAttendance(householdId: string | undefined, househelpId: string | undefined, month: string) {
+  return useQuery({
+    queryKey: ["attendance", "month", householdId, househelpId, month],
+    queryFn: ({ signal }) => get<AttendanceRecordDTO[]>(`/households/${householdId}/househelps/${househelpId}/attendance?month=${month}`, signal).then((r) => r.data),
+    enabled: !!householdId && !!househelpId,
+  });
+}

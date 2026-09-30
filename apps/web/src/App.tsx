@@ -6,6 +6,7 @@ import { SignInPage } from "./features/auth/SignInPage";
 import { SignUpPage } from "./features/auth/SignUpPage";
 import { VerifyEmailPage } from "./features/auth/VerifyEmailPage";
 import { AppShell } from "./features/app/AppShell";
+import { HousehelpCalendarPage } from "./features/app/attendance/HousehelpCalendarPage";
 import { TodayPage } from "./features/app/attendance/TodayPage";
 import { ComingSoonPage } from "./features/app/ComingSoonPage";
 import { RedirectIfSignedIn, RequireAuth } from "./features/app/guards";
@@ -40,6 +41,7 @@ export function App() {
         <Route path="househelps/:id" element={<HousehelpDetailPage />} />
         <Route path="househelps/:id/edit" element={<HousehelpFormPage mode="edit" />} />
         <Route path="househelps/:id/schedule" element={<ScheduleEditorPage />} />
+        <Route path="househelps/:id/attendance" element={<HousehelpCalendarPage />} />
         <Route path="checklist" element={<ComingSoonPage title="Checklist" icon={<ClipboardCheck size={22} />} heading="No tasks yet" text="Daily, weekly and monthly checklists are coming soon." />} />
         <Route path="bills" element={<ComingSoonPage title="Bills" icon={<ReceiptIndianRupee size={22} />} heading="Keep track of your monthly bills here." text="Bills, due dates and reminders are coming soon." />} />
         <Route path="members" element={<MembersPage />} />
