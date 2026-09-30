@@ -34,7 +34,8 @@ export function HousehelpsListPage() {
 
   const househelps = househelpsQuery.data ?? [];
   const activeCategories = (categoriesQuery.data ?? []).filter((c) => c.isActive);
-  const uncategorized = househelps.filter((h) => h.categoryIds.length === 0);
+  const activeCategoryIds = new Set(activeCategories.map((c) => c.id));
+  const uncategorized = househelps.filter((h) => !h.categoryIds.some((id) => activeCategoryIds.has(id)));
 
   return (
     <>

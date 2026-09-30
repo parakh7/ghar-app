@@ -66,4 +66,32 @@ describe("HousehelpsListPage", () => {
     expect(screen.getByText("Ramesh")).toBeInTheDocument();
     expect(screen.queryByText("Manage categories")).not.toBeInTheDocument(); // gated on categories.manage, not househelps.view
   });
+
+  it("shows househelps linked only to inactive categories under Uncategorized", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/households/h1")) return jsonResponse({ success: true, data: { ...HOUSEHOLD, permissions: ["househelps.view"] }, message: null });
+      if (url.endsWith("/categories")) {
+        return jsonResponse({
+          success: true,
+          data: [{ id: "c1", name: "Cleaning", sortOrder: 0, isActive: true }, { id: "c2", name: "Cooking", sortOrder: 1, isActive: false }],
+          message: null,
+        });
+      }
+      if (url.includes("/households/h1/househelps")) {
+        return jsonResponse({
+          success: true,
+          data: [
+            { id: "hh1", name: "Priya", phone: null, roleTitle: "Chef", status: "ACTIVE", startDate: null, endDate: null, salaryMode: "FIXED_MONTHLY", monthlySalaryPaise: null, dailyRatePaise: null, halfDayRatePaise: null, salaryDueDay: 1, notes: null, archivedAt: null, categoryIds: ["c2"], createdAt: "2026-01-01T00:00:00.000Z" },
+          ],
+          message: null,
+        });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    }) as typeof fetch);
+    renderPage();
+    expect(await screen.findByText("Priya")).toBeInTheDocument();
+    expect(screen.getByText("Uncategorized")).toBeInTheDocument();
+    expect(screen.queryByText("Cooking")).not.toBeInTheDocument();
+  });
 });
