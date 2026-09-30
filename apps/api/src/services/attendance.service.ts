@@ -1,5 +1,5 @@
-import { and, asc, eq, gte, isNull, lte, or } from "drizzle-orm";
-import type { AttendanceRecordDTO, AttendanceStatus, MarkAttendanceInput, Permission, TodayAttendanceDTO } from "@household/shared";
+import { and, asc, eq, gte, isNull, lt, lte, or } from "drizzle-orm";
+import type { AttendanceRecordDTO, AttendanceStatus, MarkAttendanceInput, MarkHolidayResultDTO, Permission, TodayAttendanceDTO } from "@household/shared";
 import { dateInZone } from "@household/shared";
 import { attendanceRecords, attendanceSchedules, househelps } from "../db/schema.js";
 import type { DbOrTx } from "../db/client.js";
@@ -123,4 +123,48 @@ export async function clearAttendance(
       });
     }
   });
+}
+
+export async function markHoliday(deps: Deps, actorUserId: string, membership: AuthedMembership, date: string, ip?: string): Promise<MarkHolidayResultDTO> {
+  const today = dateInZone(deps.clock.now(), membership.timezone);
+  assertWritable(membership, date, today);
+  const isCorrection = date !== today;
+
+  const count = await deps.db.transaction(async (tx) => {
+    const active = await tx.select({ id: househelps.id }).from(househelps)
+      .where(and(eq(househelps.householdId, membership.householdId), isNull(househelps.archivedAt)));
+    if (active.length === 0) return 0;
+    const now = deps.clock.now();
+    await tx.insert(attendanceRecords).values(active.map((h) => ({
+      householdId: membership.householdId, househelpId: h.id, date, status: "HOLIDAY" as const, note: null,
+      markedByUserId: actorUserId, markedAt: now,
+    }))).onConflictDoUpdate({
+      target: [attendanceRecords.househelpId, attendanceRecords.date],
+      set: { status: "HOLIDAY", note: null, markedByUserId: actorUserId, markedAt: now },
+    });
+    if (isCorrection) {
+      await recordAudit(tx, {
+        householdId: membership.householdId, actorUserId, action: "attendance.holidayMarked", entityType: "attendance_record",
+        newValue: { date, count: active.length }, ipAddress: ip ?? null,
+      });
+    }
+    return active.length;
+  });
+  return { date, count };
+}
+
+function nextMonth(month: string): string {
+  const [y, m] = month.split("-").map(Number);
+  return m === 12 ? `${y! + 1}-01` : `${y}-${String(m! + 1).padStart(2, "0")}`;
+}
+
+export async function getMonthAttendance(db: DbOrTx, householdId: string, househelpId: string, month: string): Promise<AttendanceRecordDTO[]> {
+  await requireHousehelpInHousehold(db, householdId, househelpId);
+  const start = `${month}-01`;
+  const end = `${nextMonth(month)}-01`;
+  const rows = await db.select({ date: attendanceRecords.date, status: attendanceRecords.status, note: attendanceRecords.note })
+    .from(attendanceRecords)
+    .where(and(eq(attendanceRecords.householdId, householdId), eq(attendanceRecords.househelpId, househelpId), gte(attendanceRecords.date, start), lt(attendanceRecords.date, end)))
+    .orderBy(asc(attendanceRecords.date));
+  return rows.map(toRecordDTO);
 }

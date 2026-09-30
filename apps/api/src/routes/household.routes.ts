@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { createCategorySchema, createHousehelpSchema, createHouseholdSchema, dateSchema, inviteMemberSchema, markAttendanceSchema, moveCategorySchema, updateCategorySchema, updateHousehelpSchema, updateHouseholdSchema, updateMemberSchema, updateScheduleSchema } from "@household/shared";
+import { createCategorySchema, createHousehelpSchema, createHouseholdSchema, dateSchema, inviteMemberSchema, markAttendanceSchema, markHolidaySchema, monthSchema, moveCategorySchema, updateCategorySchema, updateHousehelpSchema, updateHouseholdSchema, updateMemberSchema, updateScheduleSchema } from "@household/shared";
 import { requireAuth } from "../middleware/auth.js";
 import { requireHousehold } from "../middleware/household.js";
 import { inviteLimiter } from "../middleware/rate-limit.js";
@@ -157,6 +157,17 @@ export function householdRoutes(deps: Deps): Router {
     if (!parsedDate.success) throw Errors.validation({ date: "Use YYYY-MM-DD" });
     await attendance.clearAttendance(deps, req.auth!.user.id, req.membership!, req.params.househelpId as string, parsedDate.data, req.ip);
     ok(res, null, 200, "Attendance cleared.");
+  });
+
+  r.post("/:householdId/attendance/holiday", requireHousehold(deps, "attendance.mark"), async (req, res) => {
+    const { date } = parseBody(req, markHolidaySchema);
+    ok(res, await attendance.markHoliday(deps, req.auth!.user.id, req.membership!, date, req.ip), 200, "Marked as holiday.");
+  });
+
+  r.get("/:householdId/househelps/:id/attendance", requireHousehold(deps, "attendance.view"), async (req, res) => {
+    const parsedMonth = monthSchema.safeParse(req.query.month);
+    if (!parsedMonth.success) throw Errors.validation({ month: "Use YYYY-MM" });
+    ok(res, await attendance.getMonthAttendance(deps.db, req.membership!.householdId, req.params.id as string, parsedMonth.data));
   });
 
   return r;

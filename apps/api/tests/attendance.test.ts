@@ -140,3 +140,99 @@ describe("attendance — today marking", () => {
     expect(res.status).toBe(404);
   });
 });
+
+describe("attendance — bulk holiday", () => {
+  it("marks every active househelp as holiday, overwriting existing marks", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    const a = await createHousehelp(ctx, owner.cookie, h.id, "Already Present");
+    const b = await createHousehelp(ctx, owner.cookie, h.id, "Unmarked");
+    const gone = await createHousehelp(ctx, owner.cookie, h.id, "Archived");
+    await ctx.request.post(`/api/households/${h.id}/househelps/${gone.id}/archive`).set(csrf).set("cookie", owner.cookie);
+    await ctx.request.put(`/api/households/${h.id}/attendance/${a.id}`).set(csrf).set("cookie", owner.cookie).send({ date: "2026-09-29", status: "PRESENT" });
+
+    const res = await ctx.request.post(`/api/households/${h.id}/attendance/holiday`).set(csrf).set("cookie", owner.cookie).send({ date: "2026-09-29" });
+    expect(res.status).toBe(200);
+    expect(res.body.data).toMatchObject({ date: "2026-09-29", count: 2 });
+
+    const today = await ctx.request.get(`/api/households/${h.id}/attendance/today`).set("cookie", owner.cookie);
+    const byName = Object.fromEntries(today.body.data.entries.map((e: { name: string; status: string | null }) => [e.name, e.status]));
+    expect(byName["Already Present"]).toBe("HOLIDAY");
+    expect(byName["Unmarked"]).toBe("HOLIDAY");
+    expect(byName["Archived"]).toBeUndefined();
+    void b;
+  });
+
+  it("rejects a future date and requires editHistory for a past date, same as single marks", async () => {
+    const owner = await signupUser(ctx);
+    const member = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    await addMember(h.id, member.id, "MEMBER");
+    await createHousehelp(ctx, owner.cookie, h.id);
+    const future = await ctx.request.post(`/api/households/${h.id}/attendance/holiday`).set(csrf).set("cookie", owner.cookie).send({ date: "2026-09-30" });
+    expect(future.status).toBe(400);
+    const memberPast = await ctx.request.post(`/api/households/${h.id}/attendance/holiday`).set(csrf).set("cookie", member.cookie).send({ date: "2026-09-28" });
+    expect(memberPast.status).toBe(403);
+    const ownerPast = await ctx.request.post(`/api/households/${h.id}/attendance/holiday`).set(csrf).set("cookie", owner.cookie).send({ date: "2026-09-28" });
+    expect(ownerPast.status).toBe(200);
+  });
+});
+
+describe("attendance — monthly calendar", () => {
+  it("returns only marked days within the requested month, ordered by date", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    const help = await createHousehelp(ctx, owner.cookie, h.id);
+    await ctx.request.put(`/api/households/${h.id}/attendance/${help.id}`).set(csrf).set("cookie", owner.cookie).send({ date: "2026-09-29", status: "PRESENT" });
+    ctx.clock.set("2026-08-15T04:30:00Z");
+    await ctx.request.put(`/api/households/${h.id}/attendance/${help.id}`).set(csrf).set("cookie", owner.cookie).send({ date: "2026-08-15", status: "ABSENT" });
+    ctx.clock.set("2026-09-29T04:30:00Z");
+
+    const res = await ctx.request.get(`/api/households/${h.id}/househelps/${help.id}/attendance?month=2026-09`).set("cookie", owner.cookie);
+    expect(res.status).toBe(200);
+    expect(res.body.data).toEqual([{ date: "2026-09-29", status: "PRESENT", note: null }]);
+  });
+
+  it("uses the household's timezone, not UTC, to place a mark on the correct side of a month boundary", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    const help = await createHousehelp(ctx, owner.cookie, h.id);
+    // 2026-09-30T19:00:00Z is still September in UTC but already 2026-10-01 00:30 in Asia/Kolkata (UTC+5:30).
+    ctx.clock.set("2026-09-30T19:00:00Z");
+    const mark = await ctx.request.put(`/api/households/${h.id}/attendance/${help.id}`).set(csrf).set("cookie", owner.cookie).send({ date: "2026-10-01", status: "PRESENT" });
+    expect(mark.status).toBe(200);
+    const september = await ctx.request.get(`/api/households/${h.id}/househelps/${help.id}/attendance?month=2026-09`).set("cookie", owner.cookie);
+    expect(september.body.data).toEqual([]);
+    const october = await ctx.request.get(`/api/households/${h.id}/househelps/${help.id}/attendance?month=2026-10`).set("cookie", owner.cookie);
+    expect(october.body.data).toEqual([{ date: "2026-10-01", status: "PRESENT", note: null }]);
+  });
+
+  it("rejects a malformed month", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    const help = await createHousehelp(ctx, owner.cookie, h.id);
+    const res = await ctx.request.get(`/api/households/${h.id}/househelps/${help.id}/attendance?month=2026-9`).set("cookie", owner.cookie);
+    expect(res.status).toBe(400);
+  });
+
+  it("still returns a calendar for an archived househelp", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    const help = await createHousehelp(ctx, owner.cookie, h.id);
+    await ctx.request.put(`/api/households/${h.id}/attendance/${help.id}`).set(csrf).set("cookie", owner.cookie).send({ date: "2026-09-29", status: "PRESENT" });
+    await ctx.request.post(`/api/households/${h.id}/househelps/${help.id}/archive`).set(csrf).set("cookie", owner.cookie);
+    const res = await ctx.request.get(`/api/households/${h.id}/househelps/${help.id}/attendance?month=2026-09`).set("cookie", owner.cookie);
+    expect(res.status).toBe(200);
+    expect(res.body.data).toEqual([{ date: "2026-09-29", status: "PRESENT", note: null }]);
+  });
+
+  it("a member of household A cannot read household B's calendar", async () => {
+    const alice = await signupUser(ctx);
+    const bob = await signupUser(ctx);
+    const a = await createHousehold(ctx, alice.cookie, "A");
+    const b = await createHousehold(ctx, bob.cookie, "B");
+    const bobsHelp = await createHousehelp(ctx, bob.cookie, b.id);
+    const res = await ctx.request.get(`/api/households/${a.id}/househelps/${bobsHelp.id}/attendance?month=2026-09`).set("cookie", alice.cookie);
+    expect(res.status).toBe(404);
+  });
+});
