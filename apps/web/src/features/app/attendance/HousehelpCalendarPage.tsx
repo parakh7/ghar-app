@@ -10,6 +10,7 @@ import { useActiveHousehold } from "../useActiveHousehold";
 import { useHousehold } from "../members/useMembers";
 import { useHousehelp, useSchedule } from "../househelps/useHousehelps";
 import { AttendancePicker } from "./AttendancePicker";
+import { summarizeMonth } from "./summarize";
 import { toneOf } from "./statusTone";
 import { useClearAttendance, useMonthAttendance, useSetAttendance } from "./useAttendance";
 
@@ -69,6 +70,7 @@ export function HousehelpCalendarPage() {
   const lead = firstWeekdayIndex(year!, m!);
   const byDate = new Map((monthQuery.data ?? []).map((r) => [r.date, r]));
   const scheduledWeekdays = new Set(scheduleQuery.data?.weekdays ?? []);
+  const summary = summarizeMonth(monthQuery.data ?? [], scheduleQuery.data?.weekdays ?? [], month, today);
 
   function canEditDate(d: string): boolean {
     if (d > today) return false;
@@ -85,6 +87,20 @@ export function HousehelpCalendarPage() {
     <>
       <header className="page-head"><h1 className="page-title">{househelpQuery.data.name}'s attendance</h1></header>
       {pageError && <Alert tone="error" title={pageError} />}
+
+      <div className="card" style={{ marginBottom: "var(--space-4)" }}>
+        <p style={{ fontSize: "var(--text-2xl)", fontWeight: 700, margin: 0 }}>
+          {summary.rate === null ? "—" : `${Math.round(summary.rate * 100)}%`} attendance
+        </p>
+        <div className="chips" style={{ marginTop: "var(--space-3)" }}>
+          <span className={`badge badge--${toneOf("PRESENT")}`}>Present {summary.present}</span>
+          <span className={`badge badge--${toneOf("ABSENT")}`}>Absent {summary.absent}</span>
+          <span className={`badge badge--${toneOf("HALF_DAY")}`}>Half-day {summary.halfDay}</span>
+          <span className={`badge badge--${toneOf("LEAVE")}`}>Leave {summary.leave}</span>
+          <span className={`badge badge--${toneOf("HOLIDAY")}`}>Holiday {summary.holiday}</span>
+          <span className="badge badge--muted">Not yet marked {summary.notYetMarked}</span>
+        </div>
+      </div>
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "var(--space-4)" }}>
         <Button variant="ghost" icon={<ChevronLeft size={20} aria-hidden />} onClick={() => setMonth(shiftMonth(month, -1))}>Previous</Button>

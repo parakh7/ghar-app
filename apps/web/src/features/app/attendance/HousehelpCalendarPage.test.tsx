@@ -84,4 +84,18 @@ describe("HousehelpCalendarPage", () => {
     const day1 = await screen.findByRole("button", { name: "1" });
     expect(day1).toBeDisabled();
   });
+
+  it("shows the monthly summary and updates it when the month changes", async () => {
+    renderPage(["attendance.view", "attendance.editHistory"]);
+    // September 2026: schedule is Mon–Fri, "today" (pinned) is the 29th — 21 scheduled weekdays have
+    // occurred by then. The mocked month data has exactly one record: 2026-09-15 → PRESENT.
+    await screen.findByText("5% attendance");
+    expect(screen.getByText(/Present\s*1/)).toBeInTheDocument();
+    expect(screen.getByText(/Not yet marked\s*20/)).toBeInTheDocument();
+
+    // October 2026 is entirely in the future relative to the pinned "today" — nothing has occurred
+    // yet, so the rate is unknown rather than a misleading 0%.
+    await userEvent.click(screen.getByRole("button", { name: "Next" }));
+    await screen.findByText("— attendance");
+  });
 });
