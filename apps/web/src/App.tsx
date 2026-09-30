@@ -1,5 +1,5 @@
 import { Navigate, Route, Routes } from "react-router-dom";
-import { ClipboardCheck, ReceiptIndianRupee } from "lucide-react";
+import { ReceiptIndianRupee } from "lucide-react";
 import { ForgotPasswordPage } from "./features/auth/ForgotPasswordPage";
 import { ResetPasswordPage } from "./features/auth/ResetPasswordPage";
 import { SignInPage } from "./features/auth/SignInPage";
@@ -8,6 +8,7 @@ import { VerifyEmailPage } from "./features/auth/VerifyEmailPage";
 import { AppShell } from "./features/app/AppShell";
 import { HousehelpCalendarPage } from "./features/app/attendance/HousehelpCalendarPage";
 import { TodayPage } from "./features/app/attendance/TodayPage";
+import { ChecklistListPage } from "./features/app/checklist/ChecklistListPage";
 import { ComingSoonPage } from "./features/app/ComingSoonPage";
 import { RedirectIfSignedIn, RequireAuth } from "./features/app/guards";
 import { HomePage } from "./features/app/HomePage";
@@ -42,7 +43,7 @@ export function App() {
         <Route path="househelps/:id/edit" element={<HousehelpFormPage mode="edit" />} />
         <Route path="househelps/:id/schedule" element={<ScheduleEditorPage />} />
         <Route path="househelps/:id/attendance" element={<HousehelpCalendarPage />} />
-        <Route path="checklist" element={<ComingSoonPage title="Checklist" icon={<ClipboardCheck size={22} />} heading="No tasks yet" text="Daily, weekly and monthly checklists are coming soon." />} />
+        <Route path="checklist" element={<ChecklistListPage />} />
         <Route path="bills" element={<ComingSoonPage title="Bills" icon={<ReceiptIndianRupee size={22} />} heading="Keep track of your monthly bills here." text="Bills, due dates and reminders are coming soon." />} />
         <Route path="members" element={<MembersPage />} />
         <Route path="more" element={<MorePage />} />
