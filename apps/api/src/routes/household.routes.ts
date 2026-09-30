@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { createCategorySchema, createHousehelpSchema, createHouseholdSchema, dateSchema, inviteMemberSchema, markAttendanceSchema, markHolidaySchema, monthSchema, moveCategorySchema, updateCategorySchema, updateHousehelpSchema, updateHouseholdSchema, updateMemberSchema, updateScheduleSchema } from "@household/shared";
+import { createCategorySchema, createChecklistTaskSchema, createHousehelpSchema, createHouseholdSchema, dateSchema, inviteMemberSchema, markAttendanceSchema, markHolidaySchema, monthSchema, moveCategorySchema, updateCategorySchema, updateChecklistTaskSchema, updateHousehelpSchema, updateHouseholdSchema, updateMemberSchema, updateScheduleSchema } from "@household/shared";
 import { requireAuth } from "../middleware/auth.js";
 import { requireHousehold } from "../middleware/household.js";
 import { inviteLimiter } from "../middleware/rate-limit.js";
@@ -9,6 +9,7 @@ import { Errors } from "../lib/errors.js";
 import type { Deps } from "../services/deps.js";
 import * as attendance from "../services/attendance.service.js";
 import * as categories from "../services/category.service.js";
+import * as checklistTasks from "../services/checklist-task.service.js";
 import * as households from "../services/household.service.js";
 import * as househelps from "../services/househelp.service.js";
 import * as members from "../services/member.service.js";
@@ -173,6 +174,40 @@ export function householdRoutes(deps: Deps): Router {
     const parsedMonth = monthSchema.safeParse(req.query.month);
     if (!parsedMonth.success) throw Errors.validation({ month: "Use YYYY-MM" });
     ok(res, await attendance.getMonthAttendance(deps.db, req.membership!.householdId, req.params.id as string, parsedMonth.data));
+  });
+
+  r.get("/:householdId/checklist-tasks", requireHousehold(deps, "checklists.view"), async (req, res) => {
+    ok(res, await checklistTasks.listChecklistTasks(deps.db, req.membership!.householdId, req.query.includeArchived === "true"));
+  });
+
+  r.post("/:householdId/checklist-tasks", requireHousehold(deps, "checklists.manage"), async (req, res) => {
+    const input = parseBody(req, createChecklistTaskSchema);
+    ok(res, await checklistTasks.createChecklistTask(deps, req.auth!.user.id, req.membership!.householdId, input, req.ip), 201, "Checklist task added.");
+  });
+
+  r.get("/:householdId/checklist-tasks/:id", requireHousehold(deps, "checklists.view"), async (req, res) => {
+    ok(res, await checklistTasks.getChecklistTask(deps.db, req.membership!.householdId, req.params.id as string));
+  });
+
+  r.patch("/:householdId/checklist-tasks/:id", requireHousehold(deps, "checklists.manage"), async (req, res) => {
+    const patch = parseBody(req, updateChecklistTaskSchema);
+    ok(res, await checklistTasks.updateChecklistTask(deps, req.auth!.user.id, req.membership!.householdId, req.params.id as string, patch, req.ip), 200, "Checklist task updated.");
+  });
+
+  r.post("/:householdId/checklist-tasks/:id/archive", requireHousehold(deps, "checklists.manage"), async (req, res) => {
+    await checklistTasks.archiveChecklistTask(deps, req.auth!.user.id, req.membership!.householdId, req.params.id as string, req.ip);
+    ok(res, null, 200, "Checklist task removed.");
+  });
+
+  r.post("/:householdId/checklist-tasks/:id/unarchive", requireHousehold(deps, "checklists.manage"), async (req, res) => {
+    await checklistTasks.unarchiveChecklistTask(deps, req.auth!.user.id, req.membership!.householdId, req.params.id as string, req.ip);
+    ok(res, null, 200, "Checklist task restored.");
+  });
+
+  r.post("/:householdId/checklist-tasks/:id/move", requireHousehold(deps, "checklists.manage"), async (req, res) => {
+    const { direction } = parseBody(req, moveCategorySchema);
+    await checklistTasks.moveChecklistTask(deps, req.auth!.user.id, req.membership!.householdId, req.params.id as string, direction, req.ip);
+    ok(res, null, 200, "Checklist task moved.");
   });
 
   return r;
