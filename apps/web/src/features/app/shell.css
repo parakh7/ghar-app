@@ -48,6 +48,10 @@
 .page-title { font-size: var(--text-2xl); font-weight: 800; letter-spacing: -0.02em; }
 .page-sub { color: var(--ink-2); margin-top: var(--space-1); }
 .stack { display: grid; gap: var(--space-4); }
+.home-grid { display: grid; gap: var(--space-4); }
+@media (min-width: 900px) {
+  .home-grid { grid-template-columns: repeat(2, 1fr); gap: var(--space-5); }
+}
 
 /* home "today" header — the Sunrise gradient hero */
 .today {

@@ -25,7 +25,7 @@ export function HomePage() {
         <h1 className="today__date"><mark>{weekday?.replace(",", "")}</mark>,<br />{rest.join(" ")}</h1>
         <p className="today__stamp"><span className="today__dot" aria-hidden />Today at {household?.name}</p>
       </header>
-      <div className="stack">
+      <div className="home-grid">
         <section className="card card--enter" style={{ animationDelay: "0ms" }} aria-labelledby="h-help">
           <h2 className="card__title" id="h-help">Househelp</h2>
           <EmptyState icon={<Users size={22} />} title="No househelps yet" text="Add the people who help at home to track who's coming each day." tone="coral" />
