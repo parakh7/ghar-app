@@ -56,6 +56,6 @@ export type ChecklistTaskDTO = {
 
 export type CompletionStatus = "PENDING" | "COMPLETED" | "SKIPPED";
 
-export type TodayChecklistEntryDTO = { taskId: string; name: string; status: CompletionStatus | null; note: string | null };
+export type TodayChecklistEntryDTO = { taskId: string; name: string; status: "COMPLETED" | "SKIPPED" | null; note: string | null };
 
 export type TodayChecklistDTO = { date: string; entries: TodayChecklistEntryDTO[] };
