@@ -5,7 +5,7 @@
 }
 .auth__main { width: 100%; max-width: 420px; display: flex; flex-direction: column; }
 .auth__brand { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-10); }
-.auth__wordmark { font-weight: 800; font-size: var(--text-xl); letter-spacing: -0.02em; color: var(--accent-700); }
+.auth__wordmark { font-weight: 800; font-size: var(--text-xl); letter-spacing: -0.02em; color: var(--dusk); }
 .auth__title { font-size: var(--text-3xl); font-weight: 800; letter-spacing: -0.025em; }
 .auth__subtitle { margin-top: var(--space-3); color: var(--ink-2); max-width: 34ch; }
 .auth__body { margin-top: var(--space-8); }

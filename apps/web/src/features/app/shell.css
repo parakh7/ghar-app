@@ -33,7 +33,7 @@
     padding: var(--space-6) var(--space-4);
   }
   .shell__brand { display: flex; align-items: center; gap: var(--space-3); padding: 0 var(--space-3) var(--space-8); }
-  .shell__app { font-weight: 800; color: var(--accent-700); line-height: 1.1; }
+  .shell__app { font-weight: 800; color: var(--dusk); line-height: 1.1; }
   .shell__household { font-size: var(--text-sm); color: var(--ink-2); }
   .shell__nav ul { display: grid; grid-template-columns: 1fr; height: auto; gap: 2px; }
   .shell__link { flex-direction: row; justify-content: flex-start; gap: var(--space-3); padding: 0 var(--space-3); height: var(--touch); font-size: var(--text-md); border-radius: var(--radius-sm); color: var(--ink-2); }
