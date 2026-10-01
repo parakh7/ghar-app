@@ -46,6 +46,7 @@ export function ChecklistListPage() {
         <button type="button" className="chip" aria-pressed={showArchived} onClick={() => setShowArchived((v) => !v)}>
           {showArchived ? "Showing archived" : "Show archived"}
         </button>
+        <Link to="/checklist/today" className="list__label">Today's checklist</Link>
       </div>
 
       {tasks.length === 0 && (

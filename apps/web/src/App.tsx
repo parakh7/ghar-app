@@ -11,6 +11,7 @@ import { TodayPage } from "./features/app/attendance/TodayPage";
 import { ChecklistListPage } from "./features/app/checklist/ChecklistListPage";
 import { ChecklistTaskDetailPage } from "./features/app/checklist/ChecklistTaskDetailPage";
 import { ChecklistTaskFormPage } from "./features/app/checklist/ChecklistTaskFormPage";
+import { ChecklistTodayPage } from "./features/app/checklist/ChecklistTodayPage";
 import { ComingSoonPage } from "./features/app/ComingSoonPage";
 import { RedirectIfSignedIn, RequireAuth } from "./features/app/guards";
 import { HomePage } from "./features/app/HomePage";
@@ -46,6 +47,7 @@ export function App() {
         <Route path="househelps/:id/schedule" element={<ScheduleEditorPage />} />
         <Route path="househelps/:id/attendance" element={<HousehelpCalendarPage />} />
         <Route path="checklist" element={<ChecklistListPage />} />
+        <Route path="checklist/today" element={<ChecklistTodayPage />} />
         <Route path="checklist/new" element={<ChecklistTaskFormPage mode="create" />} />
         <Route path="checklist/:id" element={<ChecklistTaskDetailPage />} />
         <Route path="checklist/:id/edit" element={<ChecklistTaskFormPage mode="edit" />} />
