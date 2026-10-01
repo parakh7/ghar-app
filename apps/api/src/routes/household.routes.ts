@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { createCategorySchema, createChecklistTaskSchema, createHousehelpSchema, createHouseholdSchema, dateSchema, inviteMemberSchema, markAttendanceSchema, markHolidaySchema, monthSchema, moveCategorySchema, putAssignmentsSchema, updateCategorySchema, updateChecklistTaskSchema, updateHousehelpSchema, updateHouseholdSchema, updateMemberSchema, updateScheduleSchema } from "@household/shared";
+import { createCategorySchema, createChecklistTaskSchema, createHousehelpSchema, createHouseholdSchema, dateSchema, inviteMemberSchema, markAttendanceSchema, markCompletionSchema, markHolidaySchema, monthSchema, moveCategorySchema, putAssignmentsSchema, updateCategorySchema, updateChecklistTaskSchema, updateHousehelpSchema, updateHouseholdSchema, updateMemberSchema, updateScheduleSchema } from "@household/shared";
 import { requireAuth } from "../middleware/auth.js";
 import { requireHousehold } from "../middleware/household.js";
 import { inviteLimiter } from "../middleware/rate-limit.js";
@@ -10,6 +10,7 @@ import type { Deps } from "../services/deps.js";
 import * as attendance from "../services/attendance.service.js";
 import * as categories from "../services/category.service.js";
 import * as checklistAssignments from "../services/checklist-assignment.service.js";
+import * as checklistCompletions from "../services/checklist-completion.service.js";
 import * as checklistTasks from "../services/checklist-task.service.js";
 import * as households from "../services/household.service.js";
 import * as househelps from "../services/househelp.service.js";
@@ -175,6 +176,28 @@ export function householdRoutes(deps: Deps): Router {
     const parsedMonth = monthSchema.safeParse(req.query.month);
     if (!parsedMonth.success) throw Errors.validation({ month: "Use YYYY-MM" });
     ok(res, await attendance.getMonthAttendance(deps.db, req.membership!.householdId, req.params.id as string, parsedMonth.data));
+  });
+
+  r.get("/:householdId/checklist/today", requireHousehold(deps, "checklists.view"), async (req, res) => {
+    let dateParam: string | undefined;
+    if (req.query.date !== undefined) {
+      const parsed = dateSchema.safeParse(req.query.date);
+      if (!parsed.success) throw Errors.validation({ date: "Use YYYY-MM-DD" });
+      dateParam = parsed.data;
+    }
+    ok(res, await checklistCompletions.getTodayChecklist(deps, req.membership!, dateParam));
+  });
+
+  r.put("/:householdId/checklist/:taskId/completion", requireHousehold(deps, "checklists.complete"), async (req, res) => {
+    const input = parseBody(req, markCompletionSchema);
+    ok(res, await checklistCompletions.markCompletion(deps, req.auth!.user.id, req.membership!, req.params.taskId as string, input, req.ip), 200, "Checklist updated.");
+  });
+
+  r.delete("/:householdId/checklist/:taskId/completion", requireHousehold(deps, "checklists.complete"), async (req, res) => {
+    const parsedDate = dateSchema.safeParse(req.query.date);
+    if (!parsedDate.success) throw Errors.validation({ date: "Use YYYY-MM-DD" });
+    await checklistCompletions.clearCompletion(deps, req.auth!.user.id, req.membership!, req.params.taskId as string, parsedDate.data, req.ip);
+    ok(res, null, 200, "Checklist entry cleared.");
   });
 
   r.get("/:householdId/checklist-tasks", requireHousehold(deps, "checklists.view"), async (req, res) => {
