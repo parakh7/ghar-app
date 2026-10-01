@@ -53,3 +53,9 @@ export type ChecklistTaskDTO = {
   preferredTime: string | null; priority: TaskPriority; sortOrder: number;
   isActive: boolean; archivedAt: string | null; createdAt: string;
 };
+
+export type CompletionStatus = "PENDING" | "COMPLETED" | "SKIPPED";
+
+export type TodayChecklistEntryDTO = { taskId: string; name: string; status: CompletionStatus | null; note: string | null };
+
+export type TodayChecklistDTO = { date: string; entries: TodayChecklistEntryDTO[] };

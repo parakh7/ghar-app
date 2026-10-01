@@ -20,6 +20,11 @@ describe("permissions", () => {
     expect(hasPermission("ADMIN", "members.manage")).toBe(false);
     expect(hasPermission("ADMIN", "household.delete")).toBe(false);
   });
+  it("checklists.editHistory is restricted like attendance.editHistory", () => {
+    expect(hasPermission("MEMBER", "checklists.editHistory")).toBe(false);
+    expect(hasPermission("ADMIN", "checklists.editHistory")).toBe(true);
+    expect(hasPermission("OWNER", "checklists.editHistory")).toBe(true);
+  });
   it("applies per-household overrides but never to OWNER", () => {
     const o = { MEMBER: { grant: ["bills.manage" as const], revoke: ["salaries.pay" as const] }, OWNER: { revoke: ["household.view" as const] } };
     expect(hasPermission("MEMBER", "bills.manage", o)).toBe(true);

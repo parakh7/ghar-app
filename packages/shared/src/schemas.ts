@@ -200,6 +200,13 @@ export const updateChecklistTaskSchema = z.object({
 
 export const putAssignmentsSchema = z.object({ househelpIds: z.array(z.string().uuid()) });
 
+export const markCompletionSchema = z.object({
+  date: dateSchema,
+  status: z.enum(["COMPLETED", "SKIPPED"]),
+  note: z.string().trim().max(500).optional(),
+});
+
 export type CreateChecklistTaskInput = z.input<typeof createChecklistTaskSchema>;
 export type UpdateChecklistTaskInput = z.infer<typeof updateChecklistTaskSchema>;
 export type PutAssignmentsInput = z.infer<typeof putAssignmentsSchema>;
+export type MarkCompletionInput = z.infer<typeof markCompletionSchema>;

@@ -20,6 +20,7 @@ export const PERMISSIONS = [
   "checklists.view",
   "checklists.manage",
   "checklists.complete",
+  "checklists.editHistory",
   "salaries.view",
   "salaries.manage",       // adjustments, settlement
   "salaries.pay",          // record salary payment
