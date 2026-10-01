@@ -16,6 +16,16 @@ function toRecordDTO(row: { date: string; status: CompletionStatus; note: string
   return { date: row.date, status: row.status, note: row.note };
 }
 
+/**
+ * Narrows the DB's `CompletionStatus` down to the entry DTO's `"COMPLETED" | "SKIPPED" | null`.
+ * A completion row only ever gets written with COMPLETED or SKIPPED (see the mark endpoint's
+ * Zod schema), so PENDING should never appear here in practice; if it ever did, treat it as
+ * unmarked (`null`) rather than silently coercing it to a wrong done/skipped value.
+ */
+function toEntryStatus(status: CompletionStatus | undefined): "COMPLETED" | "SKIPPED" | null {
+  return status === "COMPLETED" || status === "SKIPPED" ? status : null;
+}
+
 /** Same-day writes only need `checklists.complete`; any other date needs `checklists.editHistory`. Never allows a future date. */
 function assertWritable(membership: AuthedMembership, date: string, today: string): void {
   if (date > today) throw Errors.validation({ date: "Can't mark a date in the future." });
@@ -51,7 +61,7 @@ export async function getTodayChecklist(deps: Deps, membership: Membership, date
   // `dueTasks` is already sortOrder-sorted (inherited from `activeTasks`); every entry here is due today by construction.
   const entries = dueTasks.map((t) => ({
     taskId: t.id, name: t.name,
-    status: completionByTask.get(t.id)?.status ?? null,
+    status: toEntryStatus(completionByTask.get(t.id)?.status),
     note: completionByTask.get(t.id)?.note ?? null,
   }));
 
