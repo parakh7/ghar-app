@@ -116,6 +116,23 @@ describe("SettlementDetailPage", () => {
     await waitFor(() => expect(amountField).toHaveValue(""));
   });
 
+  it("disables the add-adjustment form and explains why once the settlement is PARTIALLY_PAID", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/households/h1")) return jsonResponse({ success: true, data: { ...HOUSEHOLD, permissions: ["salaries.view", "salaries.manage"] }, message: null });
+      if (url.endsWith("/households/h1/salary/settlements/s1")) {
+        return jsonResponse({ success: true, data: settlementDetail({ status: "PARTIALLY_PAID", amountPaidPaise: 1000000 }), message: null });
+      }
+      if (url.endsWith("/households/h1/househelps/hh1")) return jsonResponse({ success: true, data: SUNITA, message: null });
+      throw new Error(`unexpected fetch ${url}`);
+    }) as typeof fetch);
+    renderPage();
+    expect(await screen.findByRole("heading", { name: /Sunita/ })).toBeInTheDocument();
+    expect(screen.getByText(/already partially paid/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add adjustment" })).toBeDisabled();
+    expect(screen.getByLabelText("Amount (₹)")).toBeDisabled();
+  });
+
   it("voids an adjustment", async () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {

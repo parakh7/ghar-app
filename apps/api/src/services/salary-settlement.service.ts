@@ -137,9 +137,10 @@ function computeBasePay(help: HousehelpRow, agg: MonthAttendanceAgg): BasePay {
     case "DAILY_RATE": {
       if (help.dailyRatePaise == null) throw Errors.validation({ dailyRatePaise: "This househelp has no daily rate set." });
       const halfRate = help.halfDayRatePaise ?? prorate(help.dailyRatePaise, 1, 2);
-      // HOLIDAY is paid, per the locked decision — under DAILY_RATE (which has no monthly figure to
-      // simply not-deduct from) that means a holiday pays the full daily rate, same as a present day.
-      const fullDays = agg.presentDays + agg.holidayDays;
+      // HOLIDAY and LEAVE are paid, per the locked decision ("ABSENT reduces pay; LEAVE and HOLIDAY
+      // do not") — under DAILY_RATE (which has no monthly figure to simply not-deduct from) that
+      // means both pay the full daily rate, same as a present day.
+      const fullDays = agg.presentDays + agg.holidayDays + agg.leaveDays;
       const basePaise = sumPaise([help.dailyRatePaise * fullDays, halfRate * agg.halfDays]);
       return { basePaise, absenceDeductionPaise: 0 };
     }

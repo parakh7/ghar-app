@@ -142,6 +142,25 @@ describe("salary settlement generation", () => {
     });
   });
 
+  it("DAILY_RATE: a LEAVE day is paid at the full daily rate, same as a present day", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    const help = await createHousehelp(ctx, owner.cookie, h.id, { salaryMode: "DAILY_RATE", dailyRatePaise: 100_000, halfDayRatePaise: 60_000 });
+    await scheduleWholeWeek(ctx, h.id, help.id);
+    // 25 present, 3 leave, 2 half-day, 1 absent -> 31.
+    await markAugust(ctx, h.id, help.id, {
+      "2026-08-29": "LEAVE", "2026-08-30": "LEAVE", "2026-08-31": "LEAVE",
+      "2026-08-27": "HALF_DAY", "2026-08-28": "HALF_DAY",
+      "2026-08-26": "ABSENT",
+    });
+    const res = await generate(ctx, owner.cookie, h.id, help.id);
+    expect(res.status).toBe(200);
+    // (25 present + 3 leave) * 100,000 + 2 half-day * 60,000 = 2,800,000 + 120,000 = 2,920,000.
+    expect(res.body.data).toMatchObject({
+      presentDays: 25, leaveDays: 3, halfDays: 2, absentDays: 1, basePaise: 2_920_000, netPayablePaise: 2_920_000,
+    });
+  });
+
   it("DAILY_RATE: present x rate + half x half-rate, with no monthly figure involved", async () => {
     const owner = await signupUser(ctx);
     const h = await createHousehold(ctx, owner.cookie);

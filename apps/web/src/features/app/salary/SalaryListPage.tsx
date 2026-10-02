@@ -23,6 +23,13 @@ function monthLabel(periodMonth: string): string {
   return new Date(Date.UTC(y!, m! - 1, 1)).toLocaleDateString("en-IN", { month: "long", year: "numeric", timeZone: "UTC" });
 }
 
+/** "YYYY-MM" -> "YYYY-MM" of the previous month — the most recently fully-elapsed month, which is
+ * what `generateSettlement` requires (it always rejects the current or a future month). */
+function previousMonth(month: string): string {
+  const [y, m] = month.split("-").map(Number);
+  return m === 1 ? `${y! - 1}-12` : `${y}-${String(m! - 1).padStart(2, "0")}`;
+}
+
 function HousehelpSettlements({ householdId, h }: { householdId: string; h: HousehelpDTO }) {
   const settlementsQuery = useHousehelpSettlements(householdId, h.id);
   const settlements = [...(settlementsQuery.data ?? [])].sort((a, b) => b.periodMonth.localeCompare(a.periodMonth));
@@ -63,7 +70,7 @@ export function SalaryListPage() {
   const [fieldError, setFieldError] = useState<string | undefined>(undefined);
 
   const househelps = househelpsQuery.data ?? [];
-  const defaultMonth = dateInZone(new Date(), active?.timezone ?? "Asia/Kolkata").slice(0, 7);
+  const defaultMonth = previousMonth(dateInZone(new Date(), active?.timezone ?? "Asia/Kolkata").slice(0, 7));
   const [form, setForm] = useState({ househelpId: "", month: defaultMonth });
   const selectedHousehelpId = form.househelpId || househelps[0]?.id || "";
 

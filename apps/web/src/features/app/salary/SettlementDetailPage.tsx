@@ -71,6 +71,7 @@ export function SettlementDetailPage() {
   if (!settlementQuery.data) return <p>Loading…</p>;
   const s = settlementQuery.data;
   const balance = s.netPayablePaise - s.amountPaidPaise;
+  const isPending = s.status === "PENDING";
 
   function onAddAdjustment(e: FormEvent) {
     e.preventDefault();
@@ -188,24 +189,29 @@ export function SettlementDetailPage() {
       {canManage && (
         <form className="card" onSubmit={onAddAdjustment} style={{ marginBottom: "var(--space-6)", display: "grid", gap: "var(--space-3)" }}>
           <p className="section-title" style={{ margin: 0 }}>Add adjustment</p>
+          {!isPending && (
+            <p className="list__meta">
+              This settlement is already {s.status === "PAID" ? "paid" : "partially paid"} — new adjustments will apply to a future settlement for this period, not this one.
+            </p>
+          )}
           <div className="field">
             <label className="field__label" htmlFor="adj-type">Type</label>
             <select
-              id="adj-type" className="input" value={adjustmentForm.type}
+              id="adj-type" className="input" value={adjustmentForm.type} disabled={!isPending}
               onChange={(e) => setAdjustmentForm((f) => ({ ...f, type: e.target.value as typeof f.type }))}
             >
               {ADJUSTMENT_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
             </select>
           </div>
           <TextField
-            label="Amount (₹)" inputMode="decimal" value={adjustmentForm.amount}
+            label="Amount (₹)" inputMode="decimal" value={adjustmentForm.amount} disabled={!isPending}
             onChange={(e) => setAdjustmentForm((f) => ({ ...f, amount: e.target.value }))} error={adjustmentError}
           />
           <TextField
-            label="Reason (optional)" value={adjustmentForm.reason}
+            label="Reason (optional)" value={adjustmentForm.reason} disabled={!isPending}
             onChange={(e) => setAdjustmentForm((f) => ({ ...f, reason: e.target.value }))}
           />
-          <Button type="submit" loading={createAdjustment.isPending}>Add adjustment</Button>
+          <Button type="submit" disabled={!isPending} loading={createAdjustment.isPending}>Add adjustment</Button>
         </form>
       )}
 
