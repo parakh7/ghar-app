@@ -230,6 +230,9 @@ export const recordPaymentSchema = z.object({
   notes: z.string().trim().max(500).optional(),
 });
 
+/** `?reason=` on DELETE /salary/payments/:paymentId — same cap as every other free-text field. */
+export const voidReasonSchema = z.string().trim().max(500);
+
 export type GenerateSettlementInput = z.infer<typeof generateSettlementSchema>;
 export type CreateAdjustmentInput = z.infer<typeof createAdjustmentSchema>;
 export type RecordPaymentInput = z.infer<typeof recordPaymentSchema>;

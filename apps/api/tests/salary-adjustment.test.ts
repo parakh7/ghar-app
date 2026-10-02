@@ -197,4 +197,78 @@ describe("salary adjustments", () => {
     const voidDenied = await voidAdjustment(ctx, member.cookie, h.id, created.body.data.id);
     expect(voidDenied.status).toBe(403);
   });
+
+  it("ADJUSTMENT type is a straight addition (not net-signed), and a negative amountPaise is rejected", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    const help = await createHousehelp(ctx, owner.cookie, h.id, { salaryMode: "FIXED_MONTHLY", monthlySalaryPaise: 1_000_000 });
+    await scheduleWholeWeek(ctx, h.id, help.id);
+    await markAugust(ctx, h.id, help.id);
+    const settlement = await generate(ctx, owner.cookie, h.id, help.id);
+
+    const negative = await createAdjustment(ctx, owner.cookie, h.id, help.id, { periodMonth: "2026-08-10", type: "ADJUSTMENT", amountPaise: -1000 });
+    expect(negative.status).toBe(400);
+
+    const res = await createAdjustment(ctx, owner.cookie, h.id, help.id, { periodMonth: "2026-08-10", type: "ADJUSTMENT", amountPaise: 15_000 });
+    expect(res.status).toBe(201);
+
+    const [row] = await ctx.db.select().from(salarySettlements).where(eq(salarySettlements.id, settlement.id));
+    expect(row!.additionsPaise).toBe(15_000); // addition, like BONUS/OVERTIME — never net-signed
+    expect(row!.netPayablePaise).toBe(1_015_000);
+  });
+
+  it("regression: an adjustment swept (but left unattached) by one recompute gets ATTACHED by it, so a later void correctly recomputes totals", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    const help = await createHousehelp(ctx, owner.cookie, h.id, { salaryMode: "FIXED_MONTHLY", monthlySalaryPaise: 1_000_000 });
+    await scheduleWholeWeek(ctx, h.id, help.id);
+    await markAugust(ctx, h.id, help.id);
+    const settlement = await generate(ctx, owner.cookie, h.id, help.id);
+
+    // Pay in full -> PAID, locked.
+    const payRes = await ctx.request.post(`/api/households/${h.id}/salary/settlements/${settlement.id}/payments`)
+      .set(csrf).set("cookie", owner.cookie).send({ amountPaise: 1_000_000, paidOn: "2026-09-02", method: "CASH" });
+    expect(payRes.status).toBe(201);
+    const paymentId = payRes.body.data.id as string;
+    const [paid] = await ctx.db.select().from(salarySettlements).where(eq(salarySettlements.id, settlement.id));
+    expect(paid!.status).toBe("PAID");
+
+    // Adjustment A: created while locked -> correctly stays unattached.
+    const adjA = await createAdjustment(ctx, owner.cookie, h.id, help.id, { periodMonth: "2026-08-10", type: "BONUS", amountPaise: 200_000 });
+    expect(adjA.status).toBe(201);
+    expect(adjA.body.data.settlementId).toBeNull();
+
+    // Void the payment -> settlement drops back to PENDING, unlocking it.
+    const voidPayRes = await ctx.request.delete(`/api/households/${h.id}/salary/payments/${paymentId}`).set(csrf).set("cookie", owner.cookie);
+    expect(voidPayRes.status).toBe(200);
+    const [unlocked] = await ctx.db.select().from(salarySettlements).where(eq(salarySettlements.id, settlement.id));
+    expect(unlocked!.status).toBe("PENDING");
+
+    // Adjustment B: created now that it's PENDING again -> attaches, and the sweep also counts A
+    // (still unattached) into the recomputed totals. The fix must ALSO attach A at this point,
+    // not merely count it — otherwise a later void of A would silently skip recomputing.
+    const adjB = await createAdjustment(ctx, owner.cookie, h.id, help.id, { periodMonth: "2026-08-11", type: "BONUS", amountPaise: 50_000 });
+    expect(adjB.status).toBe(201);
+    expect(adjB.body.data.settlementId).toBe(settlement.id);
+
+    const [afterB] = await ctx.db.select().from(salarySettlements).where(eq(salarySettlements.id, settlement.id));
+    expect(afterB!.additionsPaise).toBe(250_000); // A (200,000) + B (50,000)
+    expect(afterB!.netPayablePaise).toBe(1_250_000);
+
+    const [adjARow] = await ctx.db.select().from(salaryAdjustments).where(eq(salaryAdjustments.id, adjA.body.data.id));
+    expect(adjARow!.settlementId).toBe(settlement.id); // A must now be attached, not left dangling null
+
+    // Void A -> because A is now correctly attached, this MUST recompute totals down to just B.
+    const voidARes = await voidAdjustment(ctx, owner.cookie, h.id, adjA.body.data.id);
+    expect(voidARes.status).toBe(200);
+
+    const [afterVoidA] = await ctx.db.select().from(salarySettlements).where(eq(salarySettlements.id, settlement.id));
+    expect(afterVoidA!.additionsPaise).toBe(50_000); // only B remains
+    expect(afterVoidA!.netPayablePaise).toBe(1_050_000);
+
+    // getSettlement's adjustment list must agree with the totals: only B is still unvoided.
+    const detail = await ctx.request.get(`/api/households/${h.id}/salary/settlements/${settlement.id}`).set("cookie", owner.cookie);
+    const unvoided = (detail.body.data.adjustments as { voidedAt: string | null }[]).filter((a) => !a.voidedAt);
+    expect(unvoided).toHaveLength(1);
+  });
 });

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { createAdjustmentSchema, createCategorySchema, createChecklistTaskSchema, createHousehelpSchema, createHouseholdSchema, dateSchema, generateSettlementSchema, inviteMemberSchema, markAttendanceSchema, markCompletionSchema, markHolidaySchema, monthSchema, moveCategorySchema, putAssignmentsSchema, recordPaymentSchema, updateCategorySchema, updateChecklistTaskSchema, updateHousehelpSchema, updateHouseholdSchema, updateMemberSchema, updateScheduleSchema } from "@household/shared";
+import { createAdjustmentSchema, createCategorySchema, createChecklistTaskSchema, createHousehelpSchema, createHouseholdSchema, dateSchema, generateSettlementSchema, inviteMemberSchema, markAttendanceSchema, markCompletionSchema, markHolidaySchema, monthSchema, moveCategorySchema, putAssignmentsSchema, recordPaymentSchema, updateCategorySchema, updateChecklistTaskSchema, updateHousehelpSchema, updateHouseholdSchema, updateMemberSchema, updateScheduleSchema, voidReasonSchema } from "@household/shared";
 import { requireAuth } from "../middleware/auth.js";
 import { requireHousehold } from "../middleware/household.js";
 import { inviteLimiter } from "../middleware/rate-limit.js";
@@ -177,7 +177,12 @@ export function householdRoutes(deps: Deps): Router {
   });
 
   r.delete("/:householdId/salary/payments/:paymentId", requireHousehold(deps, "salaries.pay"), async (req, res) => {
-    const reason = typeof req.query.reason === "string" ? req.query.reason : undefined;
+    let reason: string | undefined;
+    if (req.query.reason !== undefined) {
+      const parsed = voidReasonSchema.safeParse(req.query.reason);
+      if (!parsed.success) throw Errors.validation({ reason: "Reason must be 500 characters or fewer." });
+      reason = parsed.data;
+    }
     await salaryPayments.voidPayment(deps, req.auth!.user.id, req.membership!, req.params.paymentId as string, reason, req.ip);
     ok(res, null, 200, "Payment voided.");
   });

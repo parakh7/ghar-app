@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import type { AdjustmentDTO, CreateAdjustmentInput, Permission } from "@household/shared";
 import { sumPaise } from "@household/shared";
 import { salaryAdjustments, salarySettlements } from "../db/schema.js";
@@ -17,17 +17,27 @@ type SettlementRow = typeof salarySettlements.$inferSelect;
  * derived `netPayablePaise`, leaving `basePaise`/`absenceDeductionPaise` untouched — only the
  * adjustment side of the calc changed, not attendance. Mirrors `generateSettlement`'s own
  * recompute, scoped to just the adjustment totals.
+ *
+ * Critically, this must also ATTACH every swept-but-still-unattached id the sum counted — exactly
+ * like `generateSettlement` does right after its own sum — otherwise an adjustment counted into
+ * these totals stays `settlementId: null` in the DB. That breaks `voidAdjustment`'s
+ * `if (adjustment.settlementId)` gate (a later void of that adjustment would silently skip
+ * recomputing, leaving stale/overstated totals permanently locked in once the settlement is paid)
+ * and desyncs `getSettlement`'s adjustment list from the totals it's supposed to explain.
  */
 async function recomputeSettlementAdjustmentTotals(
   tx: DbOrTx, actorUserId: string, membership: AuthedMembership, settlement: SettlementRow, ip?: string,
 ): Promise<void> {
-  const { additionsPaise, deductionsPaise, advancePaise } = await sumUnattachedAdjustments(
+  const { additionsPaise, deductionsPaise, advancePaise, ids } = await sumUnattachedAdjustments(
     tx, membership.householdId, settlement.househelpId, settlement.periodMonth, settlement.id,
   );
   const netPayablePaise = sumPaise([settlement.basePaise, -settlement.absenceDeductionPaise, additionsPaise, -deductionsPaise, -advancePaise]);
   const values = { additionsPaise, deductionsPaise, advancePaise, netPayablePaise };
 
   await tx.update(salarySettlements).set(values).where(eq(salarySettlements.id, settlement.id));
+  if (ids.length > 0) {
+    await tx.update(salaryAdjustments).set({ settlementId: settlement.id }).where(inArray(salaryAdjustments.id, ids));
+  }
   await recordAudit(tx, {
     householdId: membership.householdId, actorUserId, action: "settlement.regenerated", entityType: "salary_settlement", entityId: settlement.id,
     oldValue: settlement, newValue: values, ipAddress: ip ?? null,

@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { attendanceRecords, attendanceSchedules, householdMembers, salaryPayments, salarySettlements } from "../src/db/schema.js";
-import { createTestContext, csrf, signupUser, truncateAll, type TestContext } from "./helpers.js";
+import { DAY, createTestContext, csrf, signupUser, truncateAll, type TestContext } from "./helpers.js";
 
 const ctx = createTestContext();
 beforeEach(() => truncateAll(ctx.db));
@@ -242,5 +242,56 @@ describe("salary payments", () => {
 
     const allowed = await recordPayment(ctx, member.cookie, h.id, settlement.id, { amountPaise: 100_000, paidOn: "2026-09-02", method: "CASH" });
     expect(allowed.status).toBe(201);
+  });
+
+  it("a payment for exactly the remaining balance after a partial payment flips the settlement to PAID", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    const help = await createHousehelp(ctx, owner.cookie, h.id, { salaryMode: "FIXED_MONTHLY", monthlySalaryPaise: 1_000_000 });
+    await scheduleWholeWeek(ctx, h.id, help.id);
+    await markAugust(ctx, h.id, help.id);
+    const settlement = await generate(ctx, owner.cookie, h.id, help.id);
+
+    const first = await recordPayment(ctx, owner.cookie, h.id, settlement.id, { amountPaise: 400_000, paidOn: "2026-09-02", method: "CASH" });
+    expect(first.status).toBe(201);
+
+    // Exactly the remaining balance (1,000,000 - 400,000), not an arbitrary partial.
+    const second = await recordPayment(ctx, owner.cookie, h.id, settlement.id, { amountPaise: 600_000, paidOn: "2026-09-03", method: "UPI" });
+    expect(second.status).toBe(201);
+
+    const [row] = await ctx.db.select().from(salarySettlements).where(eq(salarySettlements.id, settlement.id));
+    expect(row!.status).toBe("PAID");
+    expect(row!.amountPaidPaise).toBe(1_000_000);
+  });
+
+  it("paidAt is re-stamped fresh (not resurrected from a prior value) when voided back down and paid again", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    const help = await createHousehelp(ctx, owner.cookie, h.id, { salaryMode: "FIXED_MONTHLY", monthlySalaryPaise: 1_000_000 });
+    await scheduleWholeWeek(ctx, h.id, help.id);
+    await markAugust(ctx, h.id, help.id);
+    const settlement = await generate(ctx, owner.cookie, h.id, help.id);
+
+    const first = await recordPayment(ctx, owner.cookie, h.id, settlement.id, { amountPaise: 1_000_000, paidOn: "2026-09-02", method: "CASH" });
+    expect(first.status).toBe(201);
+    let [row] = await ctx.db.select().from(salarySettlements).where(eq(salarySettlements.id, settlement.id));
+    expect(row!.status).toBe("PAID");
+    const firstPaidAt = row!.paidAt;
+    expect(firstPaidAt).not.toBeNull();
+
+    ctx.clock.advance(DAY);
+    const voidRes = await voidPayment(ctx, owner.cookie, h.id, first.body.data.id);
+    expect(voidRes.status).toBe(200);
+    [row] = await ctx.db.select().from(salarySettlements).where(eq(salarySettlements.id, settlement.id));
+    expect(row!.status).toBe("PENDING");
+    expect(row!.paidAt).toBeNull();
+
+    ctx.clock.advance(DAY);
+    const second = await recordPayment(ctx, owner.cookie, h.id, settlement.id, { amountPaise: 1_000_000, paidOn: "2026-09-05", method: "CASH" });
+    expect(second.status).toBe(201);
+    [row] = await ctx.db.select().from(salarySettlements).where(eq(salarySettlements.id, settlement.id));
+    expect(row!.status).toBe("PAID");
+    expect(row!.paidAt).not.toBeNull();
+    expect(row!.paidAt!.getTime()).toBeGreaterThan(firstPaidAt!.getTime());
   });
 });

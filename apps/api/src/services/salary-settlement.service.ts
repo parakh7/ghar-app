@@ -206,7 +206,7 @@ function holidayDaysOf(row: SettlementRow): number {
   return snapshot?.holidayDays ?? 0;
 }
 
-export function toSettlementDTO(row: SettlementRow): SettlementDTO {
+function toSettlementDTO(row: SettlementRow): SettlementDTO {
   return {
     id: row.id, househelpId: row.househelpId, periodMonth: row.periodMonth, dueDate: row.dueDate,
     basePaise: row.basePaise, workingDays: row.workingDays, presentDays: row.presentDays, halfDays: row.halfDays,
