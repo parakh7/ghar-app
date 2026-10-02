@@ -58,7 +58,7 @@ function computeDueDate(periodMonth: string, salaryDueDay: number): string {
   return `${dueYm}-${String(day).padStart(2, "0")}`;
 }
 
-async function requireHousehelpInHousehold(db: DbOrTx, householdId: string, househelpId: string): Promise<HousehelpRow> {
+export async function requireHousehelpInHousehold(db: DbOrTx, householdId: string, househelpId: string): Promise<HousehelpRow> {
   const [row] = await db.select().from(househelps).where(and(eq(househelps.householdId, householdId), eq(househelps.id, househelpId)));
   if (!row) throw Errors.notFound("Househelp");
   return row;
@@ -159,7 +159,7 @@ type AdjustmentSums = { additionsPaise: number; deductionsPaise: number; advance
  * `ADJUSTMENT` behaves exactly like `BONUS`/`OVERTIME` — a straight addition; `amountPaise` is
  * always non-negative (enforced by `createAdjustmentSchema`), so there is no signed/subtract path.
  */
-async function sumUnattachedAdjustments(
+export async function sumUnattachedAdjustments(
   db: DbOrTx, householdId: string, househelpId: string, periodMonth: string, existingSettlementId?: string,
 ): Promise<AdjustmentSums> {
   const monthStart = periodMonth;
@@ -206,7 +206,7 @@ function holidayDaysOf(row: SettlementRow): number {
   return snapshot?.holidayDays ?? 0;
 }
 
-function toSettlementDTO(row: SettlementRow): SettlementDTO {
+export function toSettlementDTO(row: SettlementRow): SettlementDTO {
   return {
     id: row.id, househelpId: row.househelpId, periodMonth: row.periodMonth, dueDate: row.dueDate,
     basePaise: row.basePaise, workingDays: row.workingDays, presentDays: row.presentDays, halfDays: row.halfDays,
@@ -217,7 +217,7 @@ function toSettlementDTO(row: SettlementRow): SettlementDTO {
   };
 }
 
-function toAdjustmentDTO(row: AdjustmentRow): AdjustmentDTO {
+export function toAdjustmentDTO(row: AdjustmentRow): AdjustmentDTO {
   return {
     id: row.id, househelpId: row.househelpId, settlementId: row.settlementId, periodMonth: row.periodMonth,
     type: row.type, amountPaise: row.amountPaise, reason: row.reason,
@@ -225,7 +225,7 @@ function toAdjustmentDTO(row: AdjustmentRow): AdjustmentDTO {
   };
 }
 
-function toPaymentDTO(row: PaymentRow): SalaryPaymentDTO {
+export function toPaymentDTO(row: PaymentRow): SalaryPaymentDTO {
   return {
     id: row.id, settlementId: row.settlementId, amountPaise: row.amountPaise, paidOn: row.paidOn, method: row.method,
     reference: row.reference, notes: row.notes, voidedAt: row.voidedAt ? row.voidedAt.toISOString() : null, createdAt: row.createdAt.toISOString(),

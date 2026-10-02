@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { createCategorySchema, createChecklistTaskSchema, createHousehelpSchema, createHouseholdSchema, dateSchema, generateSettlementSchema, inviteMemberSchema, markAttendanceSchema, markCompletionSchema, markHolidaySchema, monthSchema, moveCategorySchema, putAssignmentsSchema, updateCategorySchema, updateChecklistTaskSchema, updateHousehelpSchema, updateHouseholdSchema, updateMemberSchema, updateScheduleSchema } from "@household/shared";
+import { createAdjustmentSchema, createCategorySchema, createChecklistTaskSchema, createHousehelpSchema, createHouseholdSchema, dateSchema, generateSettlementSchema, inviteMemberSchema, markAttendanceSchema, markCompletionSchema, markHolidaySchema, monthSchema, moveCategorySchema, putAssignmentsSchema, recordPaymentSchema, updateCategorySchema, updateChecklistTaskSchema, updateHousehelpSchema, updateHouseholdSchema, updateMemberSchema, updateScheduleSchema } from "@household/shared";
 import { requireAuth } from "../middleware/auth.js";
 import { requireHousehold } from "../middleware/household.js";
 import { inviteLimiter } from "../middleware/rate-limit.js";
@@ -16,6 +16,8 @@ import * as households from "../services/household.service.js";
 import * as househelps from "../services/househelp.service.js";
 import * as members from "../services/member.service.js";
 import * as schedules from "../services/schedule.service.js";
+import * as salaryAdjustments from "../services/salary-adjustment.service.js";
+import * as salaryPayments from "../services/salary-payment.service.js";
 import * as salarySettlements from "../services/salary-settlement.service.js";
 
 /**
@@ -157,6 +159,27 @@ export function householdRoutes(deps: Deps): Router {
 
   r.get("/:householdId/salary/settlements/:settlementId", requireHousehold(deps, "salaries.view"), async (req, res) => {
     ok(res, await salarySettlements.getSettlement(deps, req.membership!, req.params.settlementId as string));
+  });
+
+  r.post("/:householdId/househelps/:id/salary/adjustments", requireHousehold(deps, "salaries.manage"), async (req, res) => {
+    const input = parseBody(req, createAdjustmentSchema);
+    ok(res, await salaryAdjustments.createAdjustment(deps, req.auth!.user.id, req.membership!, req.params.id as string, input, req.ip), 201, "Adjustment recorded.");
+  });
+
+  r.delete("/:householdId/salary/adjustments/:adjustmentId", requireHousehold(deps, "salaries.manage"), async (req, res) => {
+    await salaryAdjustments.voidAdjustment(deps, req.auth!.user.id, req.membership!, req.params.adjustmentId as string, req.ip);
+    ok(res, null, 200, "Adjustment voided.");
+  });
+
+  r.post("/:householdId/salary/settlements/:settlementId/payments", requireHousehold(deps, "salaries.pay"), async (req, res) => {
+    const input = parseBody(req, recordPaymentSchema);
+    ok(res, await salaryPayments.recordPayment(deps, req.auth!.user.id, req.membership!, req.params.settlementId as string, input, req.ip), 201, "Payment recorded.");
+  });
+
+  r.delete("/:householdId/salary/payments/:paymentId", requireHousehold(deps, "salaries.pay"), async (req, res) => {
+    const reason = typeof req.query.reason === "string" ? req.query.reason : undefined;
+    await salaryPayments.voidPayment(deps, req.auth!.user.id, req.membership!, req.params.paymentId as string, reason, req.ip);
+    ok(res, null, 200, "Payment voided.");
   });
 
   r.get("/:householdId/attendance/today", requireHousehold(deps, "attendance.view"), async (req, res) => {
