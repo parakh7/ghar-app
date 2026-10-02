@@ -24,6 +24,8 @@ import { AcceptInvitePage } from "./features/app/members/AcceptInvitePage";
 import { MembersPage } from "./features/app/members/MembersPage";
 import { MorePage } from "./features/app/MorePage";
 import { OnboardingPage } from "./features/app/OnboardingPage";
+import { SalaryListPage } from "./features/app/salary/SalaryListPage";
+import { SettlementDetailPage } from "./features/app/salary/SettlementDetailPage";
 
 export function App() {
   return (
@@ -51,6 +53,8 @@ export function App() {
         <Route path="checklist/new" element={<ChecklistTaskFormPage mode="create" />} />
         <Route path="checklist/:id" element={<ChecklistTaskDetailPage />} />
         <Route path="checklist/:id/edit" element={<ChecklistTaskFormPage mode="edit" />} />
+        <Route path="salary" element={<SalaryListPage />} />
+        <Route path="salary/:id" element={<SettlementDetailPage />} />
         <Route path="bills" element={<ComingSoonPage title="Bills" icon={<ReceiptIndianRupee size={22} />} heading="Keep track of your monthly bills here." text="Bills, due dates and reminders are coming soon." />} />
         <Route path="members" element={<MembersPage />} />
         <Route path="more" element={<MorePage />} />

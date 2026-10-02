@@ -1,9 +1,20 @@
 import { ClipboardCheck, ReceiptIndianRupee, Users, Wallet } from "lucide-react";
+import { Link } from "react-router-dom";
+import { formatINR } from "@household/shared";
 import { useSession } from "../auth/session";
 import { greeting, longDate } from "../../lib/format";
 import { EmptyState } from "../../components/EmptyState";
 import { VerifyEmailBanner } from "./VerifyEmailBanner";
+import { useHousehold } from "./members/useMembers";
+import { STATUS_LABEL, toneOf } from "./salary/statusTone";
+import { useUpcomingSettlement } from "./salary/useSalary";
 import { useActiveHousehold } from "./useActiveHousehold";
+
+/** "2026-10-01" -> "October 2026". */
+function monthLabel(periodMonth: string): string {
+  const [y, m] = periodMonth.split("-").map(Number);
+  return new Date(Date.UTC(y!, m! - 1, 1)).toLocaleDateString("en-IN", { month: "long", year: "numeric", timeZone: "UTC" });
+}
 
 /**
  * Phase 1: real greeting + household-local date. The "Today" sections are driven by
@@ -12,6 +23,9 @@ import { useActiveHousehold } from "./useActiveHousehold";
 export function HomePage() {
   const { data } = useSession();
   const { household } = useActiveHousehold();
+  const householdQuery = useHousehold(household?.id);
+  const canViewSalaries = householdQuery.data?.permissions.includes("salaries.view") ?? false;
+  const { isLoading: salariesLoading, hasAnySettlement, upcoming } = useUpcomingSettlement(household?.id, canViewSalaries);
   const tz = household?.timezone ?? "Asia/Kolkata";
   const now = new Date();
   const [weekday, ...rest] = longDate(now, tz).split(" ");
@@ -40,7 +54,21 @@ export function HomePage() {
         </section>
         <section className="card card--enter" style={{ animationDelay: "210ms" }} aria-labelledby="h-sal">
           <h2 className="card__title" id="h-sal">Salaries</h2>
-          <EmptyState icon={<Wallet size={22} />} title="Nothing due" text="Salaries appear here a few days before they're due." tone="coral" />
+          {upcoming ? (
+            <div className="list">
+              <Link to={`/salary/${upcoming.settlement.id}`} className="list__item">
+                <span className="list__text">
+                  <span className="list__label" style={{ display: "block" }}>{upcoming.househelpName} · {monthLabel(upcoming.settlement.periodMonth)}</span>
+                  <span className="list__meta">{formatINR(upcoming.settlement.netPayablePaise - upcoming.settlement.amountPaidPaise)} due</span>
+                </span>
+                <span className={`badge badge--${toneOf(upcoming.settlement.status)}`}>{STATUS_LABEL[upcoming.settlement.status]}</span>
+              </Link>
+            </div>
+          ) : !salariesLoading && hasAnySettlement ? (
+            <EmptyState icon={<Wallet size={22} />} title="All settled up" text="Every settlement for this household has been paid in full." tone="coral" />
+          ) : !salariesLoading ? (
+            <EmptyState icon={<Wallet size={22} />} title="Nothing due" text="Salaries appear here a few days before they're due." tone="coral" />
+          ) : null}
         </section>
       </div>
     </>
