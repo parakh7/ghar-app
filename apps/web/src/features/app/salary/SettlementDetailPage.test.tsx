@@ -89,6 +89,33 @@ describe("SettlementDetailPage", () => {
     });
   });
 
+  it("adds an adjustment", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/households/h1")) return jsonResponse({ success: true, data: { ...HOUSEHOLD, permissions: ["salaries.view", "salaries.manage"] }, message: null });
+      if (init?.method === "POST" && url.endsWith("/households/h1/househelps/hh1/salary/adjustments")) {
+        return jsonResponse({ success: true, data: { id: "a1", househelpId: "hh1", settlementId: "s1", periodMonth: "2026-10-01", type: "OVERTIME", amountPaise: 75000, reason: "Diwali bonus", voidedAt: null, createdAt: "2026-10-01T00:00:00.000Z" }, message: null }, 201);
+      }
+      if (url.endsWith("/households/h1/salary/settlements/s1")) return jsonResponse({ success: true, data: settlementDetail(), message: null });
+      if (url.endsWith("/households/h1/househelps/hh1")) return jsonResponse({ success: true, data: SUNITA, message: null });
+      throw new Error(`unexpected fetch ${url}`);
+    }) as typeof fetch);
+    renderPage();
+    expect(await screen.findByRole("heading", { name: /Sunita/ })).toBeInTheDocument();
+    await userEvent.selectOptions(screen.getByLabelText("Type"), "OVERTIME");
+    const amountField = screen.getByLabelText("Amount (₹)");
+    await userEvent.type(amountField, "750");
+    await userEvent.type(screen.getByLabelText("Reason (optional)"), "Diwali bonus");
+    await userEvent.click(screen.getByRole("button", { name: "Add adjustment" }));
+    await waitFor(() => {
+      const postCall = fetchSpy.mock.calls.find(([u, i]) => String(u).endsWith("/households/h1/househelps/hh1/salary/adjustments") && (i as RequestInit | undefined)?.method === "POST");
+      expect(postCall).toBeDefined();
+      const body = JSON.parse((postCall![1] as RequestInit).body as string);
+      expect(body).toEqual({ periodMonth: "2026-10-01", type: "OVERTIME", amountPaise: 75000, reason: "Diwali bonus" });
+    });
+    await waitFor(() => expect(amountField).toHaveValue(""));
+  });
+
   it("voids an adjustment", async () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {

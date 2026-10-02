@@ -1,8 +1,9 @@
 import { ClipboardCheck, ReceiptIndianRupee, Users, Wallet } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { formatINR } from "@household/shared";
 import { useSession } from "../auth/session";
 import { greeting, longDate } from "../../lib/format";
+import { Button } from "../../components/Button";
 import { EmptyState } from "../../components/EmptyState";
 import { VerifyEmailBanner } from "./VerifyEmailBanner";
 import { useHousehold } from "./members/useMembers";
@@ -22,6 +23,7 @@ function monthLabel(periodMonth: string): string {
  */
 export function HomePage() {
   const { data } = useSession();
+  const navigate = useNavigate();
   const { household } = useActiveHousehold();
   const householdQuery = useHousehold(household?.id);
   const canViewSalaries = householdQuery.data?.permissions.includes("salaries.view") ?? false;
@@ -65,9 +67,15 @@ export function HomePage() {
               </Link>
             </div>
           ) : !salariesLoading && hasAnySettlement ? (
-            <EmptyState icon={<Wallet size={22} />} title="All settled up" text="Every settlement for this household has been paid in full." tone="coral" />
+            <EmptyState
+              icon={<Wallet size={22} />} title="All settled up" text="Every settlement for this household has been paid in full." tone="coral"
+              action={canViewSalaries ? <Button variant="secondary" onClick={() => navigate("/salary")}>View all salaries</Button> : undefined}
+            />
           ) : !salariesLoading ? (
-            <EmptyState icon={<Wallet size={22} />} title="Nothing due" text="Salaries appear here a few days before they're due." tone="coral" />
+            <EmptyState
+              icon={<Wallet size={22} />} title="Nothing due" text="Salaries appear here a few days before they're due." tone="coral"
+              action={canViewSalaries ? <Button variant="secondary" onClick={() => navigate("/salary")}>View all salaries</Button> : undefined}
+            />
           ) : null}
         </section>
       </div>
