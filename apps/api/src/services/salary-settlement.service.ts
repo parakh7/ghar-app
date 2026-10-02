@@ -137,7 +137,10 @@ function computeBasePay(help: HousehelpRow, agg: MonthAttendanceAgg): BasePay {
     case "DAILY_RATE": {
       if (help.dailyRatePaise == null) throw Errors.validation({ dailyRatePaise: "This househelp has no daily rate set." });
       const halfRate = help.halfDayRatePaise ?? prorate(help.dailyRatePaise, 1, 2);
-      const basePaise = sumPaise([help.dailyRatePaise * agg.presentDays, halfRate * agg.halfDays]);
+      // HOLIDAY is paid, per the locked decision — under DAILY_RATE (which has no monthly figure to
+      // simply not-deduct from) that means a holiday pays the full daily rate, same as a present day.
+      const fullDays = agg.presentDays + agg.holidayDays;
+      const basePaise = sumPaise([help.dailyRatePaise * fullDays, halfRate * agg.halfDays]);
       return { basePaise, absenceDeductionPaise: 0 };
     }
   }
@@ -145,13 +148,32 @@ function computeBasePay(help: HousehelpRow, agg: MonthAttendanceAgg): BasePay {
 
 type AdjustmentSums = { additionsPaise: number; deductionsPaise: number; advancePaise: number; ids: string[] };
 
-/** Unattached (`settlementId IS NULL`), non-voided adjustments for `(householdId, househelpId, periodMonth)`. */
-async function sumUnattachedAdjustments(db: DbOrTx, householdId: string, househelpId: string, periodMonth: string): Promise<AdjustmentSums> {
+/**
+ * Non-voided adjustments for `(householdId, househelpId, periodMonth)` that are either still
+ * unattached (`settlementId IS NULL` — newly created since the last generate) OR already attached
+ * to `existingSettlementId` (from a prior generate of this same settlement) — re-summing both is
+ * what makes regeneration safe: a plain `settlementId IS NULL` filter would, on the second generate,
+ * see zero rows for everything attached on the first pass and silently zero out real totals.
+ * Matches by the adjustment's `periodMonth` falling anywhere within the target calendar month
+ * (not exact equality) since Task 3 doesn't guarantee that date is normalized to the 1st.
+ * `ADJUSTMENT` behaves exactly like `BONUS`/`OVERTIME` — a straight addition; `amountPaise` is
+ * always non-negative (enforced by `createAdjustmentSchema`), so there is no signed/subtract path.
+ */
+async function sumUnattachedAdjustments(
+  db: DbOrTx, householdId: string, househelpId: string, periodMonth: string, existingSettlementId?: string,
+): Promise<AdjustmentSums> {
+  const monthStart = periodMonth;
+  const monthEnd = lastDayOfMonth(periodMonth);
+  const settlementScope = existingSettlementId
+    ? or(isNull(salaryAdjustments.settlementId), eq(salaryAdjustments.settlementId, existingSettlementId))
+    : isNull(salaryAdjustments.settlementId);
+
   const rows = await db.select({ id: salaryAdjustments.id, type: salaryAdjustments.type, amountPaise: salaryAdjustments.amountPaise })
     .from(salaryAdjustments)
     .where(and(
-      eq(salaryAdjustments.householdId, householdId), eq(salaryAdjustments.househelpId, househelpId), eq(salaryAdjustments.periodMonth, periodMonth),
-      isNull(salaryAdjustments.settlementId), isNull(salaryAdjustments.voidedAt),
+      eq(salaryAdjustments.householdId, householdId), eq(salaryAdjustments.househelpId, househelpId),
+      gte(salaryAdjustments.periodMonth, monthStart), lte(salaryAdjustments.periodMonth, monthEnd),
+      isNull(salaryAdjustments.voidedAt), settlementScope,
     ));
 
   let additionsPaise = 0, deductionsPaise = 0, advancePaise = 0;
@@ -159,6 +181,7 @@ async function sumUnattachedAdjustments(db: DbOrTx, householdId: string, househe
     switch (r.type) {
       case "BONUS":
       case "OVERTIME":
+      case "ADJUSTMENT":
         additionsPaise = sumPaise([additionsPaise, r.amountPaise]);
         break;
       case "DEDUCTION":
@@ -167,20 +190,27 @@ async function sumUnattachedAdjustments(db: DbOrTx, householdId: string, househe
       case "ADVANCE":
         advancePaise = sumPaise([advancePaise, r.amountPaise]);
         break;
-      case "ADJUSTMENT":
-        if (r.amountPaise >= 0) additionsPaise = sumPaise([additionsPaise, r.amountPaise]);
-        else deductionsPaise = sumPaise([deductionsPaise, -r.amountPaise]);
-        break;
     }
   }
   return { additionsPaise, deductionsPaise, advancePaise, ids: rows.map((r) => r.id) };
+}
+
+/**
+ * `salary_settlements` has no `holiday_days` column (the table is locked/pre-designed, Task 2 doesn't
+ * migrate it) — `holidayDays` is carried in `calcSnapshot` instead (already stored there for exactly
+ * this reason) and surfaced onto the DTO from there so Task 4's UI can reconcile `workingDays` against
+ * the visible day-count fields.
+ */
+function holidayDaysOf(row: SettlementRow): number {
+  const snapshot = row.calcSnapshot as { holidayDays?: number } | null;
+  return snapshot?.holidayDays ?? 0;
 }
 
 function toSettlementDTO(row: SettlementRow): SettlementDTO {
   return {
     id: row.id, househelpId: row.househelpId, periodMonth: row.periodMonth, dueDate: row.dueDate,
     basePaise: row.basePaise, workingDays: row.workingDays, presentDays: row.presentDays, halfDays: row.halfDays,
-    absentDays: row.absentDays, leaveDays: row.leaveDays, absenceDeductionPaise: row.absenceDeductionPaise,
+    absentDays: row.absentDays, leaveDays: row.leaveDays, holidayDays: holidayDaysOf(row), absenceDeductionPaise: row.absenceDeductionPaise,
     additionsPaise: row.additionsPaise, deductionsPaise: row.deductionsPaise, advancePaise: row.advancePaise,
     netPayablePaise: row.netPayablePaise, amountPaidPaise: row.amountPaidPaise, status: row.status,
     note: row.note, paidAt: row.paidAt ? row.paidAt.toISOString() : null,
@@ -218,6 +248,9 @@ export async function generateSettlement(
 
   const help = await requireHousehelpInHousehold(deps.db, membership.householdId, househelpId);
   const agg = await aggregateMonth(deps.db, membership.householdId, househelpId, periodMonth);
+  if (agg.workingDays === 0) {
+    throw Errors.validation({ periodMonth: "This househelp has no active attendance schedule covering this month." });
+  }
   if (agg.unmarkedDays > 0) {
     throw Errors.validation({ attendance: `${agg.unmarkedDays} scheduled day(s) this month have no attendance record yet.` });
   }
@@ -233,7 +266,7 @@ export async function generateSettlement(
       throw Errors.validation({ periodMonth: "This settlement already has payments recorded and can no longer be regenerated." });
     }
 
-    const { additionsPaise, deductionsPaise, advancePaise, ids } = await sumUnattachedAdjustments(tx, membership.householdId, househelpId, periodMonth);
+    const { additionsPaise, deductionsPaise, advancePaise, ids } = await sumUnattachedAdjustments(tx, membership.householdId, househelpId, periodMonth, existing?.id);
     const netPayablePaise = sumPaise([basePaise, -absenceDeductionPaise, additionsPaise, -deductionsPaise, -advancePaise]);
     const calcSnapshot = {
       salaryMode: help.salaryMode, monthlySalaryPaise: help.monthlySalaryPaise, dailyRatePaise: help.dailyRatePaise, halfDayRatePaise: help.halfDayRatePaise,

@@ -37,10 +37,32 @@ async function scheduleWholeWeek(c: TestContext, householdId: string, househelpI
   await c.db.insert(attendanceSchedules).values({ householdId, househelpId, weekdays: [1, 2, 3, 4, 5, 6, 7], effectiveFrom: "2026-01-01" });
 }
 
+/** A schedule covering only the given ISO weekdays (1=Mon…7=Sun), effective well before August 2026. */
+async function scheduleCustom(c: TestContext, householdId: string, househelpId: string, weekdays: number[]) {
+  await c.db.insert(attendanceSchedules).values({ householdId, househelpId, weekdays, effectiveFrom: "2026-01-01" });
+}
+
+/** Same ISO-weekday formula the service uses — lets a test compute "which August dates are working days" without hand-counting a calendar. */
+function isoWeekdayOf(date: string): number {
+  return ((new Date(`${date}T00:00:00Z`).getUTCDay() + 6) % 7) + 1;
+}
+
+/** August 2026 dates whose ISO weekday is in `weekdays`. */
+function augustDatesFor(weekdays: number[]): string[] {
+  return AUGUST_DAYS.filter((d) => weekdays.includes(isoWeekdayOf(d)));
+}
+
 /** Marks every August 2026 day, defaulting to PRESENT except any date named in `overrides`. */
 async function markAugust(c: TestContext, householdId: string, househelpId: string, overrides: Record<string, AttendanceStatusValue> = {}) {
   await c.db.insert(attendanceRecords).values(
     AUGUST_DAYS.map((date) => ({ householdId, househelpId, date, status: overrides[date] ?? "PRESENT", markedAt: c.clock.now() })),
+  );
+}
+
+/** Marks only the given dates (e.g. a partial-week schedule's working days), defaulting to PRESENT except any named in `overrides`. */
+async function markDates(c: TestContext, householdId: string, househelpId: string, dates: string[], overrides: Record<string, AttendanceStatusValue> = {}) {
+  await c.db.insert(attendanceRecords).values(
+    dates.map((date) => ({ householdId, househelpId, date, status: overrides[date] ?? "PRESENT", markedAt: c.clock.now() })),
   );
 }
 
@@ -79,6 +101,44 @@ describe("salary settlement generation", () => {
     expect(res.body.data).toMatchObject({
       basePaise: 3_100_000, workingDays: 31, absentDays: 2, halfDays: 1, presentDays: 28,
       absenceDeductionPaise: 250_000, netPayablePaise: 2_850_000, status: "PENDING",
+    });
+  });
+
+  it("ATTENDANCE_BASED: a partial (Mon-Sat) schedule yields a working-day count that doesn't evenly divide the salary", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    const help = await createHousehelp(ctx, owner.cookie, h.id, { salaryMode: "ATTENDANCE_BASED", monthlySalaryPaise: 1_000_000 });
+    await scheduleCustom(ctx, h.id, help.id, [1, 2, 3, 4, 5, 6]); // Mon-Sat — August 2026 has 5 Sundays, so 26 working days.
+    const workingDates = augustDatesFor([1, 2, 3, 4, 5, 6]);
+    expect(workingDates).toHaveLength(26); // sanity check matching the brief's own worked example
+    await markDates(ctx, h.id, help.id, workingDates, {
+      [workingDates[0]!]: "ABSENT", [workingDates[1]!]: "ABSENT", [workingDates[2]!]: "HALF_DAY",
+    });
+    const res = await generate(ctx, owner.cookie, h.id, help.id);
+    expect(res.status).toBe(200);
+    // Hand-verified: prorate(1,000,000, 2, 26) = 76,923; prorate(1,000,000, 1, 52) = 19,231; total 96,154.
+    expect(res.body.data).toMatchObject({
+      basePaise: 1_000_000, workingDays: 26, absentDays: 2, halfDays: 1, presentDays: 23,
+      absenceDeductionPaise: 96_154, netPayablePaise: 903_846, status: "PENDING",
+    });
+  });
+
+  it("DAILY_RATE: a HOLIDAY day is paid at the full daily rate, same as a present day", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    const help = await createHousehelp(ctx, owner.cookie, h.id, { salaryMode: "DAILY_RATE", dailyRatePaise: 100_000, halfDayRatePaise: 60_000 });
+    await scheduleWholeWeek(ctx, h.id, help.id);
+    // 25 present, 3 holiday, 2 half-day, 1 absent -> 31.
+    await markAugust(ctx, h.id, help.id, {
+      "2026-08-29": "HOLIDAY", "2026-08-30": "HOLIDAY", "2026-08-31": "HOLIDAY",
+      "2026-08-27": "HALF_DAY", "2026-08-28": "HALF_DAY",
+      "2026-08-26": "ABSENT",
+    });
+    const res = await generate(ctx, owner.cookie, h.id, help.id);
+    expect(res.status).toBe(200);
+    // (25 present + 3 holiday) * 100,000 + 2 half-day * 60,000 = 2,800,000 + 120,000 = 2,920,000.
+    expect(res.body.data).toMatchObject({
+      presentDays: 25, holidayDays: 3, halfDays: 2, absentDays: 1, basePaise: 2_920_000, netPayablePaise: 2_920_000,
     });
   });
 
@@ -193,7 +253,16 @@ describe("salary settlement generation", () => {
     expect(second.status).toBe(400);
   });
 
-  it("auto-attaches unattached, non-voided adjustments on generation, summed and signed by type", async () => {
+  it("rejects generation when the househelp has no active attendance schedule covering this month", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    const help = await createHousehelp(ctx, owner.cookie, h.id, { salaryMode: "FIXED_MONTHLY", monthlySalaryPaise: 1_000_000 });
+    // No schedule at all -> workingDays = 0 for August.
+    const res = await generate(ctx, owner.cookie, h.id, help.id);
+    expect(res.status).toBe(400);
+  });
+
+  it("auto-attaches unattached, non-voided adjustments on generation, summed by type (ADJUSTMENT is a straight addition, like BONUS/OVERTIME)", async () => {
     const owner = await signupUser(ctx);
     const h = await createHousehold(ctx, owner.cookie);
     const help = await createHousehelp(ctx, owner.cookie, h.id, { salaryMode: "FIXED_MONTHLY", monthlySalaryPaise: 1_000_000 });
@@ -201,22 +270,21 @@ describe("salary settlement generation", () => {
     await markAugust(ctx, h.id, help.id);
 
     const periodMonth = "2026-08-01";
-    const [bonus, deduction, advance, adjPositive, adjNegative, voided] = await ctx.db.insert(salaryAdjustments).values([
+    const [bonus, deduction, advance, adjustment, voided] = await ctx.db.insert(salaryAdjustments).values([
       { householdId: h.id, househelpId: help.id, periodMonth, type: "BONUS", amountPaise: 100_000 },
       { householdId: h.id, househelpId: help.id, periodMonth, type: "DEDUCTION", amountPaise: 20_000 },
       { householdId: h.id, househelpId: help.id, periodMonth, type: "ADVANCE", amountPaise: 50_000 },
-      { householdId: h.id, househelpId: help.id, periodMonth, type: "ADJUSTMENT", amountPaise: 15_000 }, // net-signed positive -> addition
-      { householdId: h.id, househelpId: help.id, periodMonth, type: "ADJUSTMENT", amountPaise: -5_000 }, // net-signed negative -> deduction
+      { householdId: h.id, househelpId: help.id, periodMonth, type: "ADJUSTMENT", amountPaise: 15_000 }, // addition, same as BONUS/OVERTIME
       { householdId: h.id, househelpId: help.id, periodMonth, type: "BONUS", amountPaise: 999_999, voidedAt: ctx.clock.now() }, // voided, must be ignored
     ]).returning({ id: salaryAdjustments.id });
     void voided;
 
     const res = await generate(ctx, owner.cookie, h.id, help.id, periodMonth);
     expect(res.status).toBe(200);
-    // additions: 100,000 (bonus) + 15,000 (adjustment+) = 115,000; deductions: 20,000 + 5,000 (adjustment-) = 25,000; advance: 50,000.
-    expect(res.body.data).toMatchObject({ additionsPaise: 115_000, deductionsPaise: 25_000, advancePaise: 50_000 });
-    // net = 1,000,000 - 0 + 115,000 - 25,000 - 50,000 = 1,040,000
-    expect(res.body.data.netPayablePaise).toBe(1_040_000);
+    // additions: 100,000 (bonus) + 15,000 (adjustment) = 115,000; deductions: 20,000; advance: 50,000.
+    expect(res.body.data).toMatchObject({ additionsPaise: 115_000, deductionsPaise: 20_000, advancePaise: 50_000 });
+    // net = 1,000,000 - 0 + 115,000 - 20,000 - 50,000 = 1,045,000
+    expect(res.body.data.netPayablePaise).toBe(1_045_000);
 
     const settlementId = res.body.data.id as string;
     const attached = await ctx.db.select({ id: salaryAdjustments.id, settlementId: salaryAdjustments.settlementId })
@@ -225,12 +293,38 @@ describe("salary settlement generation", () => {
     expect(byId.get(bonus!.id)).toBe(settlementId);
     expect(byId.get(deduction!.id)).toBe(settlementId);
     expect(byId.get(advance!.id)).toBe(settlementId);
-    expect(byId.get(adjPositive!.id)).toBe(settlementId);
-    expect(byId.get(adjNegative!.id)).toBe(settlementId);
+    expect(byId.get(adjustment!.id)).toBe(settlementId);
 
     const detail = await ctx.request.get(`/api/households/${h.id}/salary/settlements/${settlementId}`).set("cookie", owner.cookie);
     expect(detail.status).toBe(200);
-    expect(detail.body.data.adjustments).toHaveLength(5); // the voided bonus is excluded from attachment, but still exists unattached
+    expect(detail.body.data.adjustments).toHaveLength(4); // the voided bonus is excluded from attachment, but still exists unattached
+  });
+
+  it("regenerating re-sums adjustments already attached to this settlement, and also sweeps newly-created ones, without zeroing totals", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    const help = await createHousehelp(ctx, owner.cookie, h.id, { salaryMode: "FIXED_MONTHLY", monthlySalaryPaise: 1_000_000 });
+    await scheduleWholeWeek(ctx, h.id, help.id);
+    await markAugust(ctx, h.id, help.id);
+    const periodMonth = "2026-08-01";
+
+    const [firstBonus] = await ctx.db.insert(salaryAdjustments)
+      .values({ householdId: h.id, househelpId: help.id, periodMonth, type: "BONUS", amountPaise: 50_000 })
+      .returning({ id: salaryAdjustments.id });
+
+    const first = await generate(ctx, owner.cookie, h.id, help.id, periodMonth);
+    expect(first.status).toBe(200);
+    expect(first.body.data).toMatchObject({ additionsPaise: 50_000, netPayablePaise: 1_050_000 });
+    const [afterFirst] = await ctx.db.select({ settlementId: salaryAdjustments.settlementId }).from(salaryAdjustments).where(eq(salaryAdjustments.id, firstBonus!.id));
+    expect(afterFirst!.settlementId).toBe(first.body.data.id);
+
+    // A second adjustment is added after the first generate, while the first is already attached.
+    await ctx.db.insert(salaryAdjustments).values({ householdId: h.id, househelpId: help.id, periodMonth, type: "BONUS", amountPaise: 30_000 });
+
+    const second = await generate(ctx, owner.cookie, h.id, help.id, periodMonth);
+    expect(second.status).toBe(200);
+    // Without the fix this would regress to 30,000 (the already-attached 50,000 bonus silently dropped).
+    expect(second.body.data).toMatchObject({ additionsPaise: 80_000, netPayablePaise: 1_080_000 });
   });
 
   it("a member of household A cannot generate, list, or view household B's settlements", async () => {

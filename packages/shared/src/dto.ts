@@ -67,7 +67,7 @@ export type PaymentMethod = "CASH" | "UPI" | "BANK_TRANSFER" | "CARD" | "AUTO_DE
 export type SettlementDTO = {
   id: string; househelpId: string; periodMonth: string; dueDate: string;
   basePaise: number; workingDays: number; presentDays: number; halfDays: number;
-  absentDays: number; leaveDays: number; absenceDeductionPaise: number;
+  absentDays: number; leaveDays: number; holidayDays: number; absenceDeductionPaise: number;
   additionsPaise: number; deductionsPaise: number; advancePaise: number;
   netPayablePaise: number; amountPaidPaise: number; status: SettlementStatus;
   note: string | null; paidAt: string | null;

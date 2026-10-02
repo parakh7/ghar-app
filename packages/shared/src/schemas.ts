@@ -212,7 +212,7 @@ export type PutAssignmentsInput = z.infer<typeof putAssignmentsSchema>;
 export type MarkCompletionInput = z.infer<typeof markCompletionSchema>;
 
 export const generateSettlementSchema = z.object({
-  periodMonth: z.string().regex(/^\d{4}-\d{2}-01$/, "First of the month, YYYY-MM-01"),
+  periodMonth: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])-01$/, "First of the month, YYYY-MM-01"),
 });
 
 export const createAdjustmentSchema = z.object({
