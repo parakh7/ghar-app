@@ -59,3 +59,27 @@ export type CompletionStatus = "PENDING" | "COMPLETED" | "SKIPPED";
 export type TodayChecklistEntryDTO = { taskId: string; name: string; status: "COMPLETED" | "SKIPPED" | null; note: string | null };
 
 export type TodayChecklistDTO = { date: string; entries: TodayChecklistEntryDTO[] };
+
+export type SettlementStatus = "PENDING" | "PARTIALLY_PAID" | "PAID" | "CANCELLED";
+export type AdjustmentType = "BONUS" | "OVERTIME" | "DEDUCTION" | "ADVANCE" | "ADJUSTMENT";
+export type PaymentMethod = "CASH" | "UPI" | "BANK_TRANSFER" | "CARD" | "AUTO_DEBIT" | "CHEQUE" | "OTHER";
+
+export type SettlementDTO = {
+  id: string; househelpId: string; periodMonth: string; dueDate: string;
+  basePaise: number; workingDays: number; presentDays: number; halfDays: number;
+  absentDays: number; leaveDays: number; absenceDeductionPaise: number;
+  additionsPaise: number; deductionsPaise: number; advancePaise: number;
+  netPayablePaise: number; amountPaidPaise: number; status: SettlementStatus;
+  note: string | null; paidAt: string | null;
+};
+
+export type AdjustmentDTO = {
+  id: string; househelpId: string; settlementId: string | null; periodMonth: string;
+  type: AdjustmentType; amountPaise: number; reason: string | null;
+  voidedAt: string | null; createdAt: string;
+};
+
+export type SalaryPaymentDTO = {
+  id: string; settlementId: string; amountPaise: number; paidOn: string; method: PaymentMethod;
+  reference: string | null; notes: string | null; voidedAt: string | null; createdAt: string;
+};

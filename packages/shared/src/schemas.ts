@@ -210,3 +210,26 @@ export type CreateChecklistTaskInput = z.input<typeof createChecklistTaskSchema>
 export type UpdateChecklistTaskInput = z.infer<typeof updateChecklistTaskSchema>;
 export type PutAssignmentsInput = z.infer<typeof putAssignmentsSchema>;
 export type MarkCompletionInput = z.infer<typeof markCompletionSchema>;
+
+export const generateSettlementSchema = z.object({
+  periodMonth: z.string().regex(/^\d{4}-\d{2}-01$/, "First of the month, YYYY-MM-01"),
+});
+
+export const createAdjustmentSchema = z.object({
+  periodMonth: dateSchema,
+  type: z.enum(["BONUS", "OVERTIME", "DEDUCTION", "ADVANCE", "ADJUSTMENT"]),
+  amountPaise: paiseSchema,
+  reason: z.string().trim().max(500).optional(),
+});
+
+export const recordPaymentSchema = z.object({
+  amountPaise: paiseSchema.refine((v) => v > 0, "Amount must be positive"),
+  paidOn: dateSchema,
+  method: z.enum(["CASH", "UPI", "BANK_TRANSFER", "CARD", "AUTO_DEBIT", "CHEQUE", "OTHER"]),
+  reference: z.string().trim().max(200).optional(),
+  notes: z.string().trim().max(500).optional(),
+});
+
+export type GenerateSettlementInput = z.infer<typeof generateSettlementSchema>;
+export type CreateAdjustmentInput = z.infer<typeof createAdjustmentSchema>;
+export type RecordPaymentInput = z.infer<typeof recordPaymentSchema>;
