@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { createCategorySchema, createChecklistTaskSchema, createHousehelpSchema, createHouseholdSchema, dateSchema, inviteMemberSchema, markAttendanceSchema, markCompletionSchema, markHolidaySchema, monthSchema, moveCategorySchema, putAssignmentsSchema, updateCategorySchema, updateChecklistTaskSchema, updateHousehelpSchema, updateHouseholdSchema, updateMemberSchema, updateScheduleSchema } from "@household/shared";
+import { createCategorySchema, createChecklistTaskSchema, createHousehelpSchema, createHouseholdSchema, dateSchema, generateSettlementSchema, inviteMemberSchema, markAttendanceSchema, markCompletionSchema, markHolidaySchema, monthSchema, moveCategorySchema, putAssignmentsSchema, updateCategorySchema, updateChecklistTaskSchema, updateHousehelpSchema, updateHouseholdSchema, updateMemberSchema, updateScheduleSchema } from "@household/shared";
 import { requireAuth } from "../middleware/auth.js";
 import { requireHousehold } from "../middleware/household.js";
 import { inviteLimiter } from "../middleware/rate-limit.js";
@@ -16,6 +16,7 @@ import * as households from "../services/household.service.js";
 import * as househelps from "../services/househelp.service.js";
 import * as members from "../services/member.service.js";
 import * as schedules from "../services/schedule.service.js";
+import * as salarySettlements from "../services/salary-settlement.service.js";
 
 /**
  * Household-scoped resources live under /api/households/:householdId/…
@@ -143,6 +144,19 @@ export function householdRoutes(deps: Deps): Router {
   r.put("/:householdId/househelps/:id/schedule", requireHousehold(deps, "househelps.manage"), async (req, res) => {
     const input = parseBody(req, updateScheduleSchema);
     ok(res, await schedules.putSchedule(deps, req.auth!.user.id, req.membership!, req.params.id as string, input, req.ip), 200, "Schedule updated.");
+  });
+
+  r.post("/:householdId/househelps/:id/salary/settlements", requireHousehold(deps, "salaries.manage"), async (req, res) => {
+    const input = parseBody(req, generateSettlementSchema);
+    ok(res, await salarySettlements.generateSettlement(deps, req.auth!.user.id, req.membership!, req.params.id as string, input, req.ip), 200, "Settlement generated.");
+  });
+
+  r.get("/:householdId/househelps/:id/salary/settlements", requireHousehold(deps, "salaries.view"), async (req, res) => {
+    ok(res, await salarySettlements.listSettlements(deps, req.membership!, req.params.id as string));
+  });
+
+  r.get("/:householdId/salary/settlements/:settlementId", requireHousehold(deps, "salaries.view"), async (req, res) => {
+    ok(res, await salarySettlements.getSettlement(deps, req.membership!, req.params.settlementId as string));
   });
 
   r.get("/:householdId/attendance/today", requireHousehold(deps, "attendance.view"), async (req, res) => {
