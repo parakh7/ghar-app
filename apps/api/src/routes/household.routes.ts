@@ -1,5 +1,6 @@
 import { Router } from "express";
-import { billStatusSchema, createAdjustmentSchema, createBillCategorySchema, createBillSchema, createCategorySchema, createChecklistTaskSchema, createHousehelpSchema, createHouseholdSchema, dateSchema, generateSettlementSchema, inviteMemberSchema, markAttendanceSchema, markCompletionSchema, markHolidaySchema, monthSchema, moveCategorySchema, putAssignmentsSchema, recordPaymentSchema, updateBillCategorySchema, updateBillSchema, updateCategorySchema, updateChecklistTaskSchema, updateHousehelpSchema, updateHouseholdSchema, updateMemberSchema, updateScheduleSchema, voidReasonSchema } from "@household/shared";
+import type { OccurrenceStatus } from "@household/shared";
+import { billStatusSchema, createAdjustmentSchema, createBillCategorySchema, createBillSchema, createCategorySchema, createChecklistTaskSchema, createHousehelpSchema, createHouseholdSchema, dateSchema, generateSettlementSchema, inviteMemberSchema, markAttendanceSchema, markCompletionSchema, markHolidaySchema, monthSchema, moveCategorySchema, putAssignmentsSchema, recordPaymentSchema, updateBillCategorySchema, updateBillSchema, updateCategorySchema, updateChecklistTaskSchema, updateHousehelpSchema, updateHouseholdSchema, updateMemberSchema, updateOccurrenceAmountSchema, updateScheduleSchema, voidReasonSchema } from "@household/shared";
 import { requireAuth } from "../middleware/auth.js";
 import { requireHousehold } from "../middleware/household.js";
 import { inviteLimiter } from "../middleware/rate-limit.js";
@@ -10,6 +11,7 @@ import type { Deps } from "../services/deps.js";
 import * as attendance from "../services/attendance.service.js";
 import * as billCategories from "../services/bill-category.service.js";
 import * as bills from "../services/bill.service.js";
+import * as billOccurrences from "../services/bill-occurrence.service.js";
 import * as categories from "../services/category.service.js";
 import * as checklistAssignments from "../services/checklist-assignment.service.js";
 import * as checklistCompletions from "../services/checklist-completion.service.js";
@@ -180,6 +182,45 @@ export function householdRoutes(deps: Deps): Router {
   r.post("/:householdId/bills/:id/unarchive", requireHousehold(deps, "bills.manage"), async (req, res) => {
     await bills.unarchiveBill(deps, req.auth!.user.id, req.membership!, req.params.id as string, req.ip);
     ok(res, null, 200, "Bill restored.");
+  });
+
+  const OCCURRENCE_STATUSES = ["PENDING", "PARTIALLY_PAID", "PAID", "WAIVED"] as const;
+
+  r.get("/:householdId/bills/:id/occurrences", requireHousehold(deps, "bills.view"), async (req, res) => {
+    let status: OccurrenceStatus | undefined;
+    if (req.query.status !== undefined) {
+      if (typeof req.query.status !== "string" || !(OCCURRENCE_STATUSES as readonly string[]).includes(req.query.status)) {
+        throw Errors.validation({ status: "Use PENDING, PARTIALLY_PAID, PAID, or WAIVED." });
+      }
+      status = req.query.status as OccurrenceStatus;
+    }
+    let from: string | undefined;
+    if (req.query.from !== undefined) {
+      const parsed = dateSchema.safeParse(req.query.from);
+      if (!parsed.success) throw Errors.validation({ from: "Use YYYY-MM-DD" });
+      from = parsed.data;
+    }
+    let to: string | undefined;
+    if (req.query.to !== undefined) {
+      const parsed = dateSchema.safeParse(req.query.to);
+      if (!parsed.success) throw Errors.validation({ to: "Use YYYY-MM-DD" });
+      to = parsed.data;
+    }
+    ok(res, await billOccurrences.listOccurrences(deps, req.membership!, req.params.id as string, { status, from, to }));
+  });
+
+  // Gated on `bills.view`, not `bills.manage`: this is a read-triggered refresh (recomputing the
+  // same derived rows a correct sync always would) rather than a human edit to bill data — see
+  // task-2-report.md for the full reasoning.
+  r.post("/:householdId/bills/:id/occurrences/sync", requireHousehold(deps, "bills.view"), async (req, res) => {
+    const bill = await billOccurrences.requireBillForSync(deps, req.membership!, req.params.id as string);
+    await billOccurrences.ensureOccurrences(deps, req.membership!, bill);
+    ok(res, await billOccurrences.listOccurrences(deps, req.membership!, req.params.id as string));
+  });
+
+  r.patch("/:householdId/bills/:id/occurrences/:occurrenceId", requireHousehold(deps, "bills.manage"), async (req, res) => {
+    const input = parseBody(req, updateOccurrenceAmountSchema);
+    ok(res, await billOccurrences.updateOccurrenceAmount(deps, req.auth!.user.id, req.membership!, req.params.occurrenceId as string, input, req.ip), 200, "Occurrence updated.");
   });
 
   r.get("/:householdId/househelps", requireHousehold(deps, "househelps.view"), async (req, res) => {

@@ -3,6 +3,7 @@ import type { BillDTO, BillStatus, CreateBillInput, UpdateBillInput } from "@hou
 import { billCategories, bills } from "../db/schema.js";
 import type { DbOrTx } from "../db/client.js";
 import { Errors } from "../lib/errors.js";
+import { ensureOccurrences } from "./bill-occurrence.service.js";
 import { recordAudit } from "./audit.service.js";
 import type { Deps } from "./deps.js";
 import type { Membership } from "./household.service.js";
@@ -64,11 +65,19 @@ export async function createBill(deps: Deps, actorUserId: string, membership: Me
     await recordAudit(tx, { householdId: membership.householdId, actorUserId, action: "bill.created", entityType: "bill", entityId: inserted!.id, newValue: { name: input.name, frequency: input.frequency }, ipAddress: ip ?? null });
     return inserted!;
   });
+  // A brand-new bill has no occurrences yet; run outside the insert's own transaction (same
+  // pattern as updateBill below) since ensureOccurrences opens its own.
+  await ensureOccurrences(deps, membership, row);
   return toBillDTO(row);
 }
 
 export async function updateBill(deps: Deps, actorUserId: string, membership: Membership, billId: string, patch: UpdateBillInput, ip?: string): Promise<BillDTO> {
   if (patch.categoryId) await requireCategoryInHousehold(deps.db, membership.householdId, patch.categoryId);
+  // Same "did this patch touch the recurrence config" question updateBillSchema's own superRefine
+  // asks (there: whether to require `frequency` alongside a config field) — here it decides whether
+  // existing/future occurrences need resyncing to the new schedule.
+  const configTouched = patch.frequency !== undefined || patch.intervalCount !== undefined || patch.intervalUnit !== undefined
+    || patch.firstDueDate !== undefined || patch.endDate !== undefined;
   const row = await deps.db.transaction(async (tx) => {
     const [before] = await tx.select().from(bills).where(and(eq(bills.householdId, membership.householdId), eq(bills.id, billId))).for("update");
     if (!before) throw Errors.notFound("Bill");
@@ -108,6 +117,7 @@ export async function updateBill(deps: Deps, actorUserId: string, membership: Me
     const [after] = await tx.select().from(bills).where(eq(bills.id, billId));
     return after!;
   });
+  if (configTouched) await ensureOccurrences(deps, membership, row);
   return toBillDTO(row);
 }
 
