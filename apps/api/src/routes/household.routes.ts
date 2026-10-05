@@ -1,6 +1,6 @@
 import { Router } from "express";
 import type { OccurrenceStatus } from "@household/shared";
-import { billStatusSchema, createAdjustmentSchema, createBillCategorySchema, createBillSchema, createCategorySchema, createChecklistTaskSchema, createHousehelpSchema, createHouseholdSchema, dateSchema, generateSettlementSchema, inviteMemberSchema, markAttendanceSchema, markCompletionSchema, markHolidaySchema, monthSchema, moveCategorySchema, putAssignmentsSchema, recordPaymentSchema, updateBillCategorySchema, updateBillSchema, updateCategorySchema, updateChecklistTaskSchema, updateHousehelpSchema, updateHouseholdSchema, updateMemberSchema, updateOccurrenceAmountSchema, updateScheduleSchema, voidReasonSchema } from "@household/shared";
+import { billStatusSchema, createAdjustmentSchema, createBillCategorySchema, createBillSchema, createCategorySchema, createChecklistTaskSchema, createHousehelpSchema, createHouseholdSchema, dateSchema, generateSettlementSchema, inviteMemberSchema, markAttendanceSchema, markCompletionSchema, markHolidaySchema, monthSchema, moveCategorySchema, occurrenceStatusSchema, putAssignmentsSchema, recordPaymentSchema, updateBillCategorySchema, updateBillSchema, updateCategorySchema, updateChecklistTaskSchema, updateHousehelpSchema, updateHouseholdSchema, updateMemberSchema, updateOccurrenceAmountSchema, updateScheduleSchema, voidReasonSchema } from "@household/shared";
 import { requireAuth } from "../middleware/auth.js";
 import { requireHousehold } from "../middleware/household.js";
 import { inviteLimiter } from "../middleware/rate-limit.js";
@@ -184,15 +184,12 @@ export function householdRoutes(deps: Deps): Router {
     ok(res, null, 200, "Bill restored.");
   });
 
-  const OCCURRENCE_STATUSES = ["PENDING", "PARTIALLY_PAID", "PAID", "WAIVED"] as const;
-
   r.get("/:householdId/bills/:id/occurrences", requireHousehold(deps, "bills.view"), async (req, res) => {
     let status: OccurrenceStatus | undefined;
     if (req.query.status !== undefined) {
-      if (typeof req.query.status !== "string" || !(OCCURRENCE_STATUSES as readonly string[]).includes(req.query.status)) {
-        throw Errors.validation({ status: "Use PENDING, PARTIALLY_PAID, PAID, or WAIVED." });
-      }
-      status = req.query.status as OccurrenceStatus;
+      const parsed = occurrenceStatusSchema.safeParse(req.query.status);
+      if (!parsed.success) throw Errors.validation({ status: "Use PENDING, PARTIALLY_PAID, PAID, or WAIVED." });
+      status = parsed.data;
     }
     let from: string | undefined;
     if (req.query.from !== undefined) {
@@ -211,16 +208,17 @@ export function householdRoutes(deps: Deps): Router {
 
   // Gated on `bills.view`, not `bills.manage`: this is a read-triggered refresh (recomputing the
   // same derived rows a correct sync always would) rather than a human edit to bill data — see
-  // task-2-report.md for the full reasoning.
+  // task-2-report.md for the full reasoning. (Re-confirmed after the amount-clobbering bug fix —
+  // sync can no longer touch a manually-set occurrence amount, so the premise still holds.)
   r.post("/:householdId/bills/:id/occurrences/sync", requireHousehold(deps, "bills.view"), async (req, res) => {
     const bill = await billOccurrences.requireBillForSync(deps, req.membership!, req.params.id as string);
-    await billOccurrences.ensureOccurrences(deps, req.membership!, bill);
+    await billOccurrences.ensureOccurrences(deps, req.auth!.user.id, req.membership!, bill, req.ip);
     ok(res, await billOccurrences.listOccurrences(deps, req.membership!, req.params.id as string));
   });
 
   r.patch("/:householdId/bills/:id/occurrences/:occurrenceId", requireHousehold(deps, "bills.manage"), async (req, res) => {
     const input = parseBody(req, updateOccurrenceAmountSchema);
-    ok(res, await billOccurrences.updateOccurrenceAmount(deps, req.auth!.user.id, req.membership!, req.params.occurrenceId as string, input, req.ip), 200, "Occurrence updated.");
+    ok(res, await billOccurrences.updateOccurrenceAmount(deps, req.auth!.user.id, req.membership!, req.params.id as string, req.params.occurrenceId as string, input, req.ip), 200, "Occurrence updated.");
   });
 
   r.get("/:householdId/househelps", requireHousehold(deps, "househelps.view"), async (req, res) => {

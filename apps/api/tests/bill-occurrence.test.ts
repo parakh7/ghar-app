@@ -134,29 +134,103 @@ describe("bill occurrence generation and sync", () => {
     });
   });
 
+  describe("resuming/unarchiving resyncs a schedule that changed while inactive", () => {
+    it("resuming a paused bill resyncs occurrences to whatever schedule was set while paused", async () => {
+      const owner = await signupUser(ctx);
+      const h = await createHousehold(ctx, owner.cookie);
+      const bill = await createBill(h, owner.cookie, { name: "Test bill", frequency: "MONTHLY", firstDueDate: "2026-11-05" });
+
+      await ctx.request.post(`/api/households/${h.id}/bills/${bill.id}/pause`).set(csrf).set("cookie", owner.cookie);
+      await ctx.request.patch(`/api/households/${h.id}/bills/${bill.id}`).set(csrf).set("cookie", owner.cookie).send({ frequency: "WEEKLY" });
+
+      // While paused, the edit doesn't touch occurrences yet — still the stale MONTHLY schedule.
+      const whilePaused = await listOccurrences(h, bill.id, owner.cookie);
+      const expectedMonthly = expectedDueDates({ frequency: "MONTHLY", intervalCount: 1, intervalUnit: null, firstDueDate: "2026-11-05" }, HORIZON);
+      expect(whilePaused.map((o) => o.dueDate)).toEqual(expectedMonthly);
+
+      const resumeRes = await ctx.request.post(`/api/households/${h.id}/bills/${bill.id}/resume`).set(csrf).set("cookie", owner.cookie);
+      expect(resumeRes.status).toBe(200);
+
+      const afterResume = await listOccurrences(h, bill.id, owner.cookie);
+      const expectedWeekly = expectedDueDates({ frequency: "WEEKLY", intervalCount: 1, intervalUnit: null, firstDueDate: "2026-11-05" }, HORIZON);
+      expect(afterResume.map((o) => o.dueDate)).toEqual(expectedWeekly);
+    });
+
+    it("unarchiving a bill resyncs occurrences to whatever schedule was set while archived", async () => {
+      const owner = await signupUser(ctx);
+      const h = await createHousehold(ctx, owner.cookie);
+      const bill = await createBill(h, owner.cookie, { name: "Test bill", frequency: "MONTHLY", firstDueDate: "2026-11-05" });
+
+      await ctx.request.post(`/api/households/${h.id}/bills/${bill.id}/archive`).set(csrf).set("cookie", owner.cookie);
+      await ctx.request.patch(`/api/households/${h.id}/bills/${bill.id}`).set(csrf).set("cookie", owner.cookie).send({ frequency: "WEEKLY" });
+
+      const unarchiveRes = await ctx.request.post(`/api/households/${h.id}/bills/${bill.id}/unarchive`).set(csrf).set("cookie", owner.cookie);
+      expect(unarchiveRes.status).toBe(200);
+
+      const afterUnarchive = await listOccurrences(h, bill.id, owner.cookie);
+      const expectedWeekly = expectedDueDates({ frequency: "WEEKLY", intervalCount: 1, intervalUnit: null, firstDueDate: "2026-11-05" }, HORIZON);
+      expect(afterUnarchive.map((o) => o.dueDate)).toEqual(expectedWeekly);
+    });
+  });
+
   describe("regeneration on bill edits", () => {
-    it("editing frequency regenerates future PENDING-unpaid occurrences but leaves a locked (paid) one untouched", async () => {
+    /**
+     * This is the exact scenario the original (sequence-matched) design got wrong: once an
+     * occurrence locks (paid/waived) at some sequence number, a later frequency change can never
+     * create a new row at that same slot (the unique (billId, sequence) index is already occupied),
+     * leaving a permanent hole and an out-of-order list. MONTHLY -> WEEKLY is a good adversarial
+     * case because WEEKLY's dates mostly don't land on MONTHLY's dates (unlike e.g. QUARTERLY,
+     * whose dates are a strict subset of MONTHLY's here), so this both proves the locked row
+     * survives AND that every one of the new rule's dates gets generated with no gaps.
+     */
+    it("editing frequency (MONTHLY -> WEEKLY) regenerates future PENDING-unpaid occurrences, leaves a locked (paid) one untouched, and produces a gap-free chronological schedule", async () => {
       const owner = await signupUser(ctx);
       const h = await createHousehold(ctx, owner.cookie);
       const bill = await createBill(h, owner.cookie, { name: "Test bill", frequency: "MONTHLY", firstDueDate: "2026-11-05" });
       const before = await listOccurrences(h, bill.id, owner.cookie);
-      // sequence 1 = 2026-12-05 under MONTHLY; simulate it having been paid off already (Spec 3
-      // hasn't built payment-recording yet, so this is done via a direct DB write).
-      const lockedBefore = before.find((o) => o.sequence === 1)!;
+      // 2026-12-05 = the second MONTHLY occurrence; simulate it having been paid off already
+      // (Spec 3 hasn't built payment-recording yet, so this is done via a direct DB write).
+      const lockedBefore = before.find((o) => o.dueDate === "2026-12-05")!;
       await ctx.db.update(billOccurrences).set({ status: "PAID", amountPaidPaise: 1, paidAt: ctx.clock.now() }).where(eq(billOccurrences.id, lockedBefore.id));
 
+      const res = await ctx.request.patch(`/api/households/${h.id}/bills/${bill.id}`).set(csrf).set("cookie", owner.cookie).send({ frequency: "WEEKLY" });
+      expect(res.status).toBe(200);
+
+      const after = await listOccurrences(h, bill.id, owner.cookie);
+
+      // The locked row survives, completely untouched, at its original historical date.
+      const lockedAfter = after.find((o) => o.id === lockedBefore.id)!;
+      expect(lockedAfter).toMatchObject({ dueDate: "2026-12-05", status: "PAID", amountPaidPaise: 1 });
+
+      const expectedWeekly = expectedDueDates({ frequency: "WEEKLY", intervalCount: 1, intervalUnit: null, firstDueDate: "2026-11-05" }, HORIZON);
+      // 2026-11-12 is WEEKLY's "slot 1" date — under the old sequence-matched design this would
+      // have been permanently blocked (MONTHLY's sequence 1, now locked at 2026-12-05, occupied
+      // that slot forever). Asserting it's present directly proves that bug is fixed.
+      expect(expectedWeekly).toContain("2026-11-12");
+
+      // Coherent, gap-free, chronologically ordered: every WEEKLY date, plus the one locked
+      // historical date, each appearing exactly once, in ascending due-date order.
+      const expectedAll = [...expectedWeekly, "2026-12-05"].sort();
+      expect(after.map((o) => o.dueDate)).toEqual(expectedAll);
+    });
+
+    it("editing frequency reuses an existing unlocked row when the new rule's date happens to coincide with an old one (no needless delete+reinsert)", async () => {
+      const owner = await signupUser(ctx);
+      const h = await createHousehold(ctx, owner.cookie);
+      const bill = await createBill(h, owner.cookie, { name: "Test bill", frequency: "MONTHLY", firstDueDate: "2026-11-05" });
+      const before = await listOccurrences(h, bill.id, owner.cookie);
+      const anchor = before.find((o) => o.dueDate === "2026-11-05")!;
+
+      // QUARTERLY's dates (every 3 months from the same anchor) are a strict subset of MONTHLY's
+      // here, so every QUARTERLY date already exists as an unlocked MONTHLY-generated row.
       const res = await ctx.request.patch(`/api/households/${h.id}/bills/${bill.id}`).set(csrf).set("cookie", owner.cookie).send({ frequency: "QUARTERLY" });
       expect(res.status).toBe(200);
 
       const after = await listOccurrences(h, bill.id, owner.cookie);
-      const lockedAfter = after.find((o) => o.sequence === 1)!;
-      expect(lockedAfter).toMatchObject({ id: lockedBefore.id, dueDate: "2026-12-05", status: "PAID" });
-
-      const expected = expectedDueDates({ frequency: "QUARTERLY", intervalCount: 1, intervalUnit: null, firstDueDate: "2026-11-05" }, HORIZON);
-      // sequence 1's dueDate stays the old MONTHLY value (locked); every other sequence matches the new QUARTERLY schedule.
-      const expectedWithLock = expected.map((d, i) => (i === 1 ? "2026-12-05" : d));
-      expect(after.map((o) => o.dueDate)).toEqual(expectedWithLock);
-      expect(after).toHaveLength(expected.length);
+      const expectedQuarterly = expectedDueDates({ frequency: "QUARTERLY", intervalCount: 1, intervalUnit: null, firstDueDate: "2026-11-05" }, HORIZON);
+      expect(after.map((o) => o.dueDate)).toEqual(expectedQuarterly);
+      // The anchor row itself (same id) was kept, not deleted and reinserted.
+      expect(after.some((o) => o.id === anchor.id)).toBe(true);
     });
 
     it("shortening endDate deletes now-out-of-range future PENDING occurrences", async () => {
@@ -186,13 +260,80 @@ describe("bill occurrence generation and sync", () => {
       expect(after).toEqual(before);
     });
 
-    it("records one summary audit entry per sync, not one per row", async () => {
+    it("records one summary audit entry per sync, not one per row, attributed to the triggering user", async () => {
       const owner = await signupUser(ctx);
       const h = await createHousehold(ctx, owner.cookie);
       const bill = await createBill(h, owner.cookie, { name: "Test bill", frequency: "MONTHLY", firstDueDate: "2026-11-05" });
       const logs = await ctx.db.select().from(auditLogs).where(and(eq(auditLogs.householdId, h.id), eq(auditLogs.action, "bill.occurrencesSynced")));
       expect(logs).toHaveLength(1);
-      expect(logs[0]).toMatchObject({ entityId: bill.id, newValue: { inserted: expect.any(Number) } });
+      expect(logs[0]).toMatchObject({ entityId: bill.id, actorUserId: owner.id, newValue: { inserted: expect.any(Number) } });
+    });
+
+    it("a resync with no changes writes nothing (exact idempotency, no audit entry)", async () => {
+      const owner = await signupUser(ctx);
+      const h = await createHousehold(ctx, owner.cookie);
+      const bill = await createBill(h, owner.cookie, { name: "Test bill", frequency: "MONTHLY", firstDueDate: "2026-11-05" });
+
+      const countSyncLogs = async () => {
+        const logs = await ctx.db.select().from(auditLogs).where(and(eq(auditLogs.householdId, h.id), eq(auditLogs.action, "bill.occurrencesSynced")));
+        return logs.length;
+      };
+
+      const afterCreate = await countSyncLogs();
+      expect(afterCreate).toBe(1); // first generation, at bill-creation time
+
+      const sync1 = await ctx.request.post(`/api/households/${h.id}/bills/${bill.id}/occurrences/sync`).set(csrf).set("cookie", owner.cookie);
+      expect(sync1.status).toBe(200);
+      expect(await countSyncLogs()).toBe(afterCreate); // nothing changed — no new entry
+
+      const sync2 = await ctx.request.post(`/api/households/${h.id}/bills/${bill.id}/occurrences/sync`).set(csrf).set("cookie", owner.cookie);
+      expect(sync2.status).toBe(200);
+      expect(await countSyncLogs()).toBe(afterCreate);
+    });
+
+    it("a past-due PENDING occurrence survives a resync untouched (locked by being overdue, not just by payment)", async () => {
+      const owner = await signupUser(ctx);
+      const h = await createHousehold(ctx, owner.cookie);
+      // firstDueDate in the past relative to TODAY (2026-09-29) — first generation backfills
+      // overdue history, so this bill is created with several already-past-due PENDING rows.
+      const bill = await createBill(h, owner.cookie, { name: "Test bill", frequency: "MONTHLY", firstDueDate: "2026-01-05" });
+      const before = await listOccurrences(h, bill.id, owner.cookie);
+      const pastDue = before.filter((o) => o.dueDate <= TODAY);
+      expect(pastDue.length).toBeGreaterThan(0);
+
+      const syncRes = await ctx.request.post(`/api/households/${h.id}/bills/${bill.id}/occurrences/sync`).set(csrf).set("cookie", owner.cookie);
+      expect(syncRes.status).toBe(200);
+
+      const after = await listOccurrences(h, bill.id, owner.cookie);
+      const pastDueAfter = after.filter((o) => pastDue.some((p) => p.id === o.id));
+      expect(pastDueAfter).toEqual(pastDue);
+    });
+
+    it("amountPaise changing later never retroactively rewrites an already-generated occurrence's amountDuePaise", async () => {
+      const owner = await signupUser(ctx);
+      const h = await createHousehold(ctx, owner.cookie);
+      const bill = await createBill(h, owner.cookie, { name: "Test bill", frequency: "MONTHLY", firstDueDate: "2026-11-05", amountPaise: 100000 });
+      const [occurrence] = await listOccurrences(h, bill.id, owner.cookie);
+      expect(occurrence!.amountDuePaise).toBe(100000);
+
+      // Manually correct one occurrence's amount (what updateOccurrenceAmount is for).
+      await ctx.request.patch(`/api/households/${h.id}/bills/${bill.id}/occurrences/${occurrence!.id}`).set(csrf).set("cookie", owner.cookie)
+        .send({ amountDuePaise: 123456 });
+
+      // A plain resync (no bill.amountPaise change) must not touch it.
+      await ctx.request.post(`/api/households/${h.id}/bills/${bill.id}/occurrences/sync`).set(csrf).set("cookie", owner.cookie);
+      const afterResync = await listOccurrences(h, bill.id, owner.cookie);
+      expect(afterResync.find((o) => o.id === occurrence!.id)!.amountDuePaise).toBe(123456);
+
+      // Even changing the bill's own amountPaise must not retroactively touch an existing row —
+      // amount sync only ever happens at insert time for a brand-new occurrence. `firstDueDate` is
+      // resent unchanged alongside it purely to force `configTouched` so this PATCH actually
+      // triggers a resync (amountPaise alone doesn't) — the thing under test is what that resync
+      // does to the existing row's amount, not whether it ran.
+      await ctx.request.patch(`/api/households/${h.id}/bills/${bill.id}`).set(csrf).set("cookie", owner.cookie)
+        .send({ amountPaise: 999999, firstDueDate: "2026-11-05" });
+      const afterAmountChange = await listOccurrences(h, bill.id, owner.cookie);
+      expect(afterAmountChange.find((o) => o.id === occurrence!.id)!.amountDuePaise).toBe(123456);
     });
   });
 
@@ -231,6 +372,22 @@ describe("bill occurrence generation and sync", () => {
       const res = await ctx.request.patch(`/api/households/${h.id}/bills/${bill.id}/occurrences/00000000-0000-0000-0000-000000000000`).set(csrf).set("cookie", owner.cookie)
         .send({ amountDuePaise: 250000 });
       expect(res.status).toBe(404);
+    });
+
+    it("404s when the URL's bill id doesn't match the occurrence's actual bill (same household)", async () => {
+      const owner = await signupUser(ctx);
+      const h = await createHousehold(ctx, owner.cookie);
+      const billA = await createBill(h, owner.cookie, { name: "Bill A", frequency: "MONTHLY", firstDueDate: "2026-11-05" });
+      const billB = await createBill(h, owner.cookie, { name: "Bill B", frequency: "MONTHLY", firstDueDate: "2026-11-05" });
+      const [occurrenceA] = await listOccurrences(h, billA.id, owner.cookie);
+
+      const res = await ctx.request.patch(`/api/households/${h.id}/bills/${billB.id}/occurrences/${occurrenceA!.id}`).set(csrf).set("cookie", owner.cookie)
+        .send({ amountDuePaise: 1 });
+      expect(res.status).toBe(404);
+
+      // The occurrence itself is untouched.
+      const stillA = await listOccurrences(h, billA.id, owner.cookie);
+      expect(stillA.find((o) => o.id === occurrenceA!.id)!.amountDuePaise).toBe(occurrenceA!.amountDuePaise);
     });
   });
 

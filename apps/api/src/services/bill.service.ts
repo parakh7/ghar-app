@@ -67,7 +67,7 @@ export async function createBill(deps: Deps, actorUserId: string, membership: Me
   });
   // A brand-new bill has no occurrences yet; run outside the insert's own transaction (same
   // pattern as updateBill below) since ensureOccurrences opens its own.
-  await ensureOccurrences(deps, membership, row);
+  await ensureOccurrences(deps, actorUserId, membership, row, ip);
   return toBillDTO(row);
 }
 
@@ -117,48 +117,55 @@ export async function updateBill(deps: Deps, actorUserId: string, membership: Me
     const [after] = await tx.select().from(bills).where(eq(bills.id, billId));
     return after!;
   });
-  if (configTouched) await ensureOccurrences(deps, membership, row);
+  if (configTouched) await ensureOccurrences(deps, actorUserId, membership, row, ip);
   return toBillDTO(row);
 }
 
 type Transition = { from: BillStatus[]; set: Partial<{ status: BillStatus; archivedAt: Date | null }>; action: string; conflictMessage: string };
 
-async function transitionBill(deps: Deps, actorUserId: string, membership: Membership, billId: string, t: Transition, ip?: string): Promise<void> {
-  await deps.db.transaction(async (tx) => {
-    const [before] = await tx.select({ id: bills.id, status: bills.status }).from(bills)
+/** Returns the bill's row after the transition — `resumeBill`/`unarchiveBill` need it to resync occurrences without an extra query. */
+async function transitionBill(deps: Deps, actorUserId: string, membership: Membership, billId: string, t: Transition, ip?: string): Promise<BillRow> {
+  return deps.db.transaction(async (tx) => {
+    const [before] = await tx.select().from(bills)
       .where(and(eq(bills.householdId, membership.householdId), eq(bills.id, billId)))
       .for("update");
     if (!before) throw Errors.notFound("Bill");
     if (!t.from.includes(before.status)) throw Errors.conflict(t.conflictMessage);
     await tx.update(bills).set(t.set).where(eq(bills.id, billId));
     await recordAudit(tx, { householdId: membership.householdId, actorUserId, action: t.action, entityType: "bill", entityId: billId, oldValue: { status: before.status }, newValue: t.set, ipAddress: ip ?? null });
+    const [after] = await tx.select().from(bills).where(eq(bills.id, billId));
+    return after!;
   });
 }
 
-export function pauseBill(deps: Deps, actorUserId: string, membership: Membership, billId: string, ip?: string): Promise<void> {
-  return transitionBill(deps, actorUserId, membership, billId, {
+export async function pauseBill(deps: Deps, actorUserId: string, membership: Membership, billId: string, ip?: string): Promise<void> {
+  await transitionBill(deps, actorUserId, membership, billId, {
     from: ["ACTIVE"], set: { status: "PAUSED" }, action: "bill.paused",
     conflictMessage: "Only an active bill can be paused.",
   }, ip);
 }
 
-export function resumeBill(deps: Deps, actorUserId: string, membership: Membership, billId: string, ip?: string): Promise<void> {
-  return transitionBill(deps, actorUserId, membership, billId, {
+/** Resuming lands the bill back in ACTIVE — its schedule may have changed while paused (left untouched then), so resync now. */
+export async function resumeBill(deps: Deps, actorUserId: string, membership: Membership, billId: string, ip?: string): Promise<void> {
+  const row = await transitionBill(deps, actorUserId, membership, billId, {
     from: ["PAUSED"], set: { status: "ACTIVE" }, action: "bill.resumed",
     conflictMessage: "Only a paused bill can be resumed.",
   }, ip);
+  await ensureOccurrences(deps, actorUserId, membership, row, ip);
 }
 
-export function archiveBill(deps: Deps, actorUserId: string, membership: Membership, billId: string, ip?: string): Promise<void> {
-  return transitionBill(deps, actorUserId, membership, billId, {
+export async function archiveBill(deps: Deps, actorUserId: string, membership: Membership, billId: string, ip?: string): Promise<void> {
+  await transitionBill(deps, actorUserId, membership, billId, {
     from: ["ACTIVE", "PAUSED"], set: { status: "ARCHIVED", archivedAt: deps.clock.now() }, action: "bill.archived",
     conflictMessage: "This bill is already archived.",
   }, ip);
 }
 
-export function unarchiveBill(deps: Deps, actorUserId: string, membership: Membership, billId: string, ip?: string): Promise<void> {
-  return transitionBill(deps, actorUserId, membership, billId, {
+/** Same reasoning as `resumeBill` — unarchiving also lands the bill back in ACTIVE. */
+export async function unarchiveBill(deps: Deps, actorUserId: string, membership: Membership, billId: string, ip?: string): Promise<void> {
+  const row = await transitionBill(deps, actorUserId, membership, billId, {
     from: ["ARCHIVED"], set: { status: "ACTIVE", archivedAt: null }, action: "bill.unarchived",
     conflictMessage: "Only an archived bill can be restored.",
   }, ip);
+  await ensureOccurrences(deps, actorUserId, membership, row, ip);
 }

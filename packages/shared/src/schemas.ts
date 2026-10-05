@@ -321,5 +321,7 @@ export const updateBillSchema = z.object({
 export type CreateBillInput = z.input<typeof createBillSchema>;
 export type UpdateBillInput = z.infer<typeof updateBillSchema>;
 
+export const occurrenceStatusSchema = z.enum(["PENDING", "PARTIALLY_PAID", "PAID", "WAIVED"]);
+
 export const updateOccurrenceAmountSchema = z.object({ amountDuePaise: paiseSchema });
 export type UpdateOccurrenceAmountInput = z.infer<typeof updateOccurrenceAmountSchema>;

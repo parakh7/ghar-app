@@ -53,7 +53,7 @@ export async function requireBillForSync(deps: Deps, membership: Membership, bil
 }
 
 /**
- * `today + 12 calendar months`, clamped (Jan 31 -> following Jan 31, or Jan 29 in a non-leap year).
+ * `date + 12 calendar months`, clamped (Jan 31 -> following Jan 31, or Jan 29 in a non-leap year).
  * Reuses `occurrenceDueDate`'s YEARLY-case month math (`sequence * 12` months) instead of
  * duplicating the clamped-month-addition logic that already lives in `@household/shared`.
  */
@@ -62,80 +62,114 @@ function oneYearOut(date: string): string {
 }
 
 /**
- * A row is safe for the generator to touch (update in place, or delete when it falls outside the
- * newly-computed range) only while it's still exactly what generation produced and nothing real
- * has happened to it yet: still PENDING, nothing paid against it, and not yet due. Once any of
- * those stop holding — paid, waived, partially paid, or simply due-or-past-due — it's locked:
- * a household member may have already relied on the amount/date shown, so edits to the bill's
- * schedule going forward must never silently rewrite or remove it.
+ * `date - 12 calendar months`. Reuses the same clamped month-math via the CUSTOM/"month" branch
+ * with a negative sequence — `occurrenceDueDate`'s `addMonthsClamped` helper is explicitly written
+ * to stay correct for a negative total ("the modulo is written defensively so it stays correct if
+ * that ever changes"); this is that case.
  */
-function isGeneratorOwned(row: OccurrenceRow, today: string): boolean {
+function oneYearAgo(date: string): string {
+  return occurrenceDueDate({ frequency: "CUSTOM", intervalCount: 12, intervalUnit: "month", firstDueDate: date }, -1);
+}
+
+/**
+ * Unlocked = still exactly what generation would produce and nothing real has happened to it yet:
+ * PENDING, nothing paid, not yet due. Everything else — paid, waived, partially paid, or simply
+ * due-or-past-due — is locked: a household member may already be relying on the amount/date shown,
+ * so the generator must never rewrite or remove it, no matter how the bill's schedule changes later.
+ */
+function isUnlocked(row: OccurrenceRow, today: string): boolean {
   return row.status === "PENDING" && row.amountPaidPaise === 0 && row.dueDate > today;
 }
 
 /**
- * Idempotent sync: brings `bill_occurrences` for one bill in line with its current configuration,
- * out to a rolling horizon. No-op for a non-ACTIVE bill (PAUSED/ARCHIVED bills don't generate).
+ * The due dates the bill's current rule produces, bounded to `[floor, horizon]` (both inclusive).
+ * `floor: null` means unbounded below (still subject to `occurrenceDueDate` throwing for a ONE_TIME
+ * bill asked for sequence > 0, which this never does — ONE_TIME is handled as a single date).
  */
-export async function ensureOccurrences(deps: Deps, membership: Membership, bill: EnsureOccurrencesBillFields): Promise<void> {
+function ruleDatesWithin(bill: EnsureOccurrencesBillFields, floor: string | null, horizon: string): string[] {
+  if (bill.frequency === "ONE_TIME") {
+    if (bill.firstDueDate > horizon) return [];
+    if (floor !== null && bill.firstDueDate < floor) return [];
+    return [bill.firstDueDate];
+  }
+  const dates: string[] = [];
+  for (let sequence = 0; ; sequence++) {
+    const dueDate = occurrenceDueDate(bill, sequence);
+    if (dueDate > horizon) break;
+    if (floor === null || dueDate >= floor) dates.push(dueDate);
+  }
+  return dates;
+}
+
+/**
+ * Idempotent sync: brings `bill_occurrences` for one bill in line with its current configuration,
+ * out to a rolling 12-month horizon. No-op for a non-ACTIVE bill (PAUSED/ARCHIVED don't generate).
+ *
+ * Matches by DUE DATE, not by sequence number — sequence is a pure row-identity counter (assigned
+ * once at insert, never reused, never meaningful as "position in the schedule"). Matching by
+ * sequence was the original (buggy) design: once any occurrence locks (paid/waived) at some
+ * sequence, a later frequency/firstDueDate change can never create a new row at that same slot
+ * (the unique `(billId, sequence)` index already occupied), leaving a permanent hole. Matching by
+ * date instead means a locked row simply keeps its own historical date forever, and the current
+ * rule's dates are generated/removed independently of what sequence numbers happen to exist.
+ */
+export async function ensureOccurrences(
+  deps: Deps, actorUserId: string, membership: Membership, bill: EnsureOccurrencesBillFields, ip?: string,
+): Promise<void> {
   if (bill.status !== "ACTIVE") return;
 
   const today = dateInZone(deps.clock.now(), membership.timezone);
   const horizonCap = oneYearOut(today);
   const horizon = bill.endDate && bill.endDate < horizonCap ? bill.endDate : horizonCap;
-
-  const needed = new Map<number, string>();
-  if (bill.frequency === "ONE_TIME") {
-    if (bill.firstDueDate <= horizon) needed.set(0, bill.firstDueDate);
-  } else {
-    for (let sequence = 0; ; sequence++) {
-      const dueDate = occurrenceDueDate(bill, sequence);
-      if (dueDate > horizon) break;
-      needed.set(sequence, dueDate);
-    }
-  }
-
   const amountDuePaise = bill.amountPaise ?? 0;
 
   await deps.db.transaction(async (tx) => {
     const existingRows = await tx.select().from(billOccurrences)
       .where(and(eq(billOccurrences.householdId, bill.householdId), eq(billOccurrences.billId, bill.id)));
-    const existingBySequence = new Map(existingRows.map((row) => [row.sequence, row]));
 
+    const isFirstGeneration = existingRows.length === 0;
+    // First generation backfills overdue history (clamped to 12 months back, so a very old
+    // `firstDueDate` can't produce an unbounded number of historical rows). A resync (the bill
+    // already has at least one occurrence, locked or not) only ever looks forward — a frequency
+    // correction shouldn't suddenly manufacture a flood of newly-overdue bills.
+    let neededDates = isFirstGeneration ? ruleDatesWithin(bill, oneYearAgo(today), horizon) : ruleDatesWithin(bill, null, horizon);
+    if (!isFirstGeneration) neededDates = neededDates.filter((d) => d > today);
+    const neededSet = new Set(neededDates);
+
+    const unlockedByDate = new Map<string, OccurrenceRow>();
+    const lockedDates = new Set<string>();
+    let maxSequence = -1;
+    for (const row of existingRows) {
+      maxSequence = Math.max(maxSequence, row.sequence);
+      if (isUnlocked(row, today)) unlockedByDate.set(row.dueDate, row);
+      else lockedDates.add(row.dueDate);
+    }
+
+    let nextSequence = maxSequence + 1;
     let insertedCount = 0;
-    let updatedCount = 0;
     let deletedCount = 0;
+    let skippedDuplicateCount = 0;
 
-    for (const [sequence, dueDate] of needed) {
-      const existing = existingBySequence.get(sequence);
-      if (!existing) {
-        await tx.insert(billOccurrences).values({
-          householdId: bill.householdId, billId: bill.id, sequence, dueDate, amountDuePaise, status: "PENDING",
-        });
-        insertedCount += 1;
-        continue;
-      }
-      if (isGeneratorOwned(existing, today) && (existing.dueDate !== dueDate || existing.amountDuePaise !== amountDuePaise)) {
-        await tx.update(billOccurrences).set({ dueDate, amountDuePaise }).where(eq(billOccurrences.id, existing.id));
-        updatedCount += 1;
-      }
+    for (const dueDate of neededDates) {
+      if (unlockedByDate.has(dueDate)) continue; // already exactly right — no write
+      if (lockedDates.has(dueDate)) { skippedDuplicateCount += 1; continue; } // history already covers this date
+      await tx.insert(billOccurrences).values({
+        householdId: bill.householdId, billId: bill.id, sequence: nextSequence, dueDate, amountDuePaise, status: "PENDING",
+      });
+      nextSequence += 1;
+      insertedCount += 1;
     }
 
-    for (const [sequence, existing] of existingBySequence) {
-      if (needed.has(sequence)) continue;
-      if (isGeneratorOwned(existing, today)) {
-        await tx.delete(billOccurrences).where(eq(billOccurrences.id, existing.id));
-        deletedCount += 1;
-      }
+    for (const [dueDate, row] of unlockedByDate) {
+      if (neededSet.has(dueDate)) continue;
+      await tx.delete(billOccurrences).where(eq(billOccurrences.id, row.id));
+      deletedCount += 1;
     }
 
-    // System-triggered (no single human actor — `createBill`/`updateBill` already recorded their
-    // own `bill.created`/`bill.updated` entry for the actor's edit); one summary entry per call,
-    // not one per row.
-    if (insertedCount > 0 || updatedCount > 0 || deletedCount > 0) {
+    if (insertedCount > 0 || deletedCount > 0) {
       await recordAudit(tx, {
-        householdId: bill.householdId, actorUserId: null, action: "bill.occurrencesSynced", entityType: "bill", entityId: bill.id,
-        newValue: { inserted: insertedCount, updated: updatedCount, deleted: deletedCount },
+        householdId: bill.householdId, actorUserId, action: "bill.occurrencesSynced", entityType: "bill", entityId: bill.id,
+        newValue: { inserted: insertedCount, deleted: deletedCount, skippedDuplicate: skippedDuplicateCount }, ipAddress: ip ?? null,
       });
     }
   });
@@ -151,23 +185,30 @@ export async function listOccurrences(
   if (filters.status) conditions.push(eq(billOccurrences.status, filters.status));
   if (filters.from) conditions.push(gte(billOccurrences.dueDate, filters.from));
   if (filters.to) conditions.push(lte(billOccurrences.dueDate, filters.to));
-  const rows = await deps.db.select().from(billOccurrences).where(and(...conditions)).orderBy(asc(billOccurrences.sequence));
+  // Sequence no longer tracks schedule position (dates can be matched/inserted/deleted independently
+  // of it), so ordering by it alone could show a locked historical row out of chronological order
+  // next to freshly-generated ones. Date first, sequence only as the (never actually reached)
+  // tiebreak for two rows sharing a due date.
+  const rows = await deps.db.select().from(billOccurrences).where(and(...conditions))
+    .orderBy(asc(billOccurrences.dueDate), asc(billOccurrences.sequence));
   return rows.map(toOccurrenceDTO);
 }
 
 /**
- * Scoped by `(householdId, occurrenceId)` only, not also the bill — an occurrence id is already
- * unambiguous once household-scoped, matching how `salary/payments/:paymentId` doesn't re-require
- * its parent settlement id either.
+ * Scoped by `(householdId, billId, occurrenceId)` — the `billId` check exists purely so the URL's
+ * `:id` segment can't lie about which bill it's touching (the occurrence is already unambiguous
+ * once household-scoped, same as `salary/payments/:paymentId` not re-requiring its parent
+ * settlement id, but a mismatched `billId` here would silently mutate a different bill's
+ * occurrence than the one named in the request path).
  */
 export async function updateOccurrenceAmount(
-  deps: Deps, actorUserId: string, membership: Membership, occurrenceId: string, input: UpdateOccurrenceAmountInput, ip?: string,
+  deps: Deps, actorUserId: string, membership: Membership, billId: string, occurrenceId: string, input: UpdateOccurrenceAmountInput, ip?: string,
 ): Promise<BillOccurrenceDTO> {
   const row = await deps.db.transaction(async (tx) => {
     const [before] = await tx.select().from(billOccurrences)
       .where(and(eq(billOccurrences.householdId, membership.householdId), eq(billOccurrences.id, occurrenceId)))
       .for("update");
-    if (!before) throw Errors.notFound("Occurrence");
+    if (!before || before.billId !== billId) throw Errors.notFound("Occurrence");
     if (before.status !== "PENDING") throw Errors.validation({ amountDuePaise: "Only a pending occurrence's amount can be changed." });
 
     const [updated] = await tx.update(billOccurrences).set({ amountDuePaise: input.amountDuePaise })
