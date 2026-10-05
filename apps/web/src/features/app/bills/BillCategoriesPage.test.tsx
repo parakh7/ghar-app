@@ -65,6 +65,30 @@ describe("BillCategoriesPage", () => {
     expect(JSON.parse((moveCall![1] as RequestInit).body as string)).toEqual({ direction: "up" });
   });
 
+  it("renders a seeded icon slug as a lucide icon, not raw slug text, and falls back to literal text for unrecognized icons", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/households/h1")) return jsonResponse({ success: true, data: { ...HOUSEHOLD, permissions: ["bills.view"] }, message: null });
+      if (url.endsWith("/bill-categories")) {
+        return jsonResponse({
+          success: true,
+          data: [
+            { id: "c1", name: "Electricity", icon: "zap", sortOrder: 0, isActive: true },
+            { id: "c2", name: "Housing", icon: "🏠", sortOrder: 1, isActive: true },
+          ],
+          message: null,
+        });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    }) as typeof fetch);
+    renderPage();
+    await screen.findByText("Electricity");
+    // the raw slug must not appear as literal text anywhere in the row
+    expect(screen.queryByText(/zap/)).not.toBeInTheDocument();
+    // an unrecognized icon value (emoji) still falls back to literal text next to the name
+    expect(await screen.findByText(/🏠/)).toBeInTheDocument();
+  });
+
   it("hides the add-category form and per-row controls for a viewer without bills.manage", async () => {
     mockFetch(["bills.view"]);
     renderPage();

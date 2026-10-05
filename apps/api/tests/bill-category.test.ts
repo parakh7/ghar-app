@@ -24,6 +24,9 @@ describe("bill categories", () => {
     const res = await ctx.request.get(`/api/households/${h.id}/bill-categories`).set("cookie", owner.cookie);
     expect(res.status).toBe(200);
     expect(res.body.data.map((c: { name: string }) => c.name)).toEqual(["Electricity", "Internet", "Mobile", "Gas", "Water", "Society maintenance", "Rent", "Insurance", "Credit card", "Subscriptions", "Newspaper", "School fees", "Property tax", "Other"]);
+    // Pin the icon slugs too — these are lucide-react icon names (e.g. "zap" -> Zap), not emoji or free text.
+    // apps/web/src/features/app/bills/categoryIcons.ts must keep a matching entry for each slug below.
+    expect(res.body.data.map((c: { icon: string }) => c.icon)).toEqual(["zap", "wifi", "smartphone", "flame", "droplet", "building", "home", "shield", "credit-card", "tv", "newspaper", "graduation-cap", "landmark", "receipt"]);
   });
 
   it("creates a bill category with name and optional icon at the end of the order", async () => {

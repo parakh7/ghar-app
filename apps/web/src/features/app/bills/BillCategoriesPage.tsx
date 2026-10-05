@@ -10,9 +10,17 @@ import { zodFieldErrors } from "../../auth/zod-errors";
 import { useActiveHousehold } from "../useActiveHousehold";
 import { useHousehold } from "../members/useMembers";
 import { useBillCategories, useCreateBillCategory, useDeleteBillCategory, useMoveBillCategory, useUpdateBillCategory } from "./useBills";
+import { CATEGORY_ICONS } from "./categoryIcons";
 
 function messageFrom(err: unknown): string {
   return err instanceof ApiError ? err.message : "Something went wrong. Please try again.";
+}
+
+function CategoryIcon({ icon }: { icon: string | null }) {
+  if (!icon) return null;
+  const Icon = CATEGORY_ICONS[icon];
+  if (Icon) return <Icon size={16} aria-hidden style={{ verticalAlign: "-2px", marginRight: "var(--space-1)" }} />;
+  return <>{icon} </>;
 }
 
 export function BillCategoriesPage() {
@@ -51,7 +59,7 @@ export function BillCategoriesPage() {
         {categoriesQuery.data?.map((c, i) => (
           <div key={c.id} className="list__item">
             <span className="list__text">
-              <span className="list__label" style={{ display: "block" }}>{c.icon ? `${c.icon} ` : ""}{c.name}</span>
+              <span className="list__label" style={{ display: "block" }}><CategoryIcon icon={c.icon} />{c.name}</span>
               {!c.isActive && <span className="list__meta">Inactive</span>}
             </span>
             {canManage && (
@@ -86,7 +94,7 @@ export function BillCategoriesPage() {
         <form className="auth__form" onSubmit={onAdd} noValidate style={{ marginTop: "var(--space-6)" }}>
           {errors.formError && <Alert tone="error" title={errors.formError} />}
           <TextField label="Category name" value={name} onChange={(e) => setName(e.target.value)} error={errors.fieldErrors.name} />
-          <TextField label="Icon" hint="Optional, e.g. an emoji" value={icon} onChange={(e) => setIcon(e.target.value)} error={errors.fieldErrors.icon} />
+          <TextField label="Icon" hint="Optional — a short icon name like zap or wifi, or your own emoji" value={icon} onChange={(e) => setIcon(e.target.value)} error={errors.fieldErrors.icon} />
           <Button type="submit" block loading={createCategory.isPending}>Add category</Button>
         </form>
       )}

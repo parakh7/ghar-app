@@ -10,6 +10,12 @@ import { useActiveHousehold } from "../useActiveHousehold";
 import { useHousehold } from "../members/useMembers";
 import { FREQUENCY_OPTIONS, PAYMENT_METHOD_OPTIONS } from "./billFrequency";
 import { useBill, useBillCategories, useCreateBill, useUpdateBill } from "./useBills";
+import { CATEGORY_ICONS } from "./categoryIcons";
+
+function categoryOptionLabel(name: string, icon: string | null): string {
+  if (icon && !CATEGORY_ICONS[icon]) return `${icon} ${name}`;
+  return name;
+}
 
 const AMOUNT_HINT = "Enter a valid rupee amount, e.g. 1500 or 1,500.50. Leave blank for a variable amount.";
 
@@ -129,7 +135,7 @@ export function BillFormPage({ mode }: { mode: "create" | "edit" }) {
             <label className="field__label" htmlFor="category">Category</label>
             <select id="category" className="input" value={form.categoryId} onChange={set("categoryId")}>
               <option value="">No category</option>
-              {categoriesQuery.data!.filter((c) => c.isActive).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              {categoriesQuery.data!.filter((c) => c.isActive).map((c) => <option key={c.id} value={c.id}>{categoryOptionLabel(c.name, c.icon)}</option>)}
             </select>
           </div>
         )}
