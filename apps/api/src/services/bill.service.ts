@@ -3,7 +3,7 @@ import type { BillDTO, BillStatus, CreateBillInput, UpdateBillInput } from "@hou
 import { billCategories, bills } from "../db/schema.js";
 import type { DbOrTx } from "../db/client.js";
 import { Errors } from "../lib/errors.js";
-import { ensureOccurrences } from "./bill-occurrence.service.js";
+import { applyAmountChange, ensureOccurrences } from "./bill-occurrence.service.js";
 import { recordAudit } from "./audit.service.js";
 import type { Deps } from "./deps.js";
 import type { Membership } from "./household.service.js";
@@ -66,8 +66,9 @@ export async function createBill(deps: Deps, actorUserId: string, membership: Me
     return inserted!;
   });
   // A brand-new bill has no occurrences yet; run outside the insert's own transaction (same
-  // pattern as updateBill below) since ensureOccurrences opens its own.
-  await ensureOccurrences(deps, actorUserId, membership, row, ip);
+  // pattern as updateBill below) since ensureOccurrences opens its own. This is the ONLY call site
+  // that ever passes `isInitialGeneration: true` — see ensureOccurrences's doc comment for why.
+  await ensureOccurrences(deps, actorUserId, membership, row, true, ip);
   return toBillDTO(row);
 }
 
@@ -117,7 +118,12 @@ export async function updateBill(deps: Deps, actorUserId: string, membership: Me
     const [after] = await tx.select().from(bills).where(eq(bills.id, billId));
     return after!;
   });
-  if (configTouched) await ensureOccurrences(deps, actorUserId, membership, row, ip);
+  if (configTouched) await ensureOccurrences(deps, actorUserId, membership, row, false, ip);
+  // A deliberate re-pricing (the household changed the bill's own amount) is handled separately from
+  // `ensureOccurrences`'s schedule-resync — see `applyAmountChange`'s doc comment for why this
+  // cascades (including overriding an earlier manual `updateOccurrenceAmount` correction) while a
+  // routine resync must never touch an existing row's amount at all.
+  if (patch.amountPaise !== undefined) await applyAmountChange(deps, actorUserId, membership, row, row.amountPaise ?? 0, ip);
   return toBillDTO(row);
 }
 
@@ -151,7 +157,7 @@ export async function resumeBill(deps: Deps, actorUserId: string, membership: Me
     from: ["PAUSED"], set: { status: "ACTIVE" }, action: "bill.resumed",
     conflictMessage: "Only a paused bill can be resumed.",
   }, ip);
-  await ensureOccurrences(deps, actorUserId, membership, row, ip);
+  await ensureOccurrences(deps, actorUserId, membership, row, false, ip);
 }
 
 export async function archiveBill(deps: Deps, actorUserId: string, membership: Membership, billId: string, ip?: string): Promise<void> {
@@ -167,5 +173,5 @@ export async function unarchiveBill(deps: Deps, actorUserId: string, membership:
     from: ["ARCHIVED"], set: { status: "ACTIVE", archivedAt: null }, action: "bill.unarchived",
     conflictMessage: "Only an archived bill can be restored.",
   }, ip);
-  await ensureOccurrences(deps, actorUserId, membership, row, ip);
+  await ensureOccurrences(deps, actorUserId, membership, row, false, ip);
 }

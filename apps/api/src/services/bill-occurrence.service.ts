@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, lte } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, lte } from "drizzle-orm";
 import type { BillOccurrenceDTO, BillFrequency, BillStatus, OccurrenceStatus, UpdateOccurrenceAmountInput } from "@household/shared";
 import { dateInZone, occurrenceDueDate } from "@household/shared";
 import { bills, billOccurrences } from "../db/schema.js";
@@ -83,14 +83,16 @@ function isUnlocked(row: OccurrenceRow, today: string): boolean {
 
 /**
  * The due dates the bill's current rule produces, bounded to `[floor, horizon]` (both inclusive).
- * `floor: null` means unbounded below (still subject to `occurrenceDueDate` throwing for a ONE_TIME
- * bill asked for sequence > 0, which this never does — ONE_TIME is handled as a single date).
+ * `floor: null` means unbounded below.
+ *
+ * ONE_TIME is exempt from `floor` entirely, regardless of what's passed: it only ever has ONE
+ * possible occurrence (`firstDueDate` itself), so there is no "worst-case backfill size" for the
+ * floor to bound — applying it here would mean a `ONE_TIME` bill whose `firstDueDate` is more than
+ * floor-many months in the past silently generates zero occurrences, forever, with no recovery path.
  */
 function ruleDatesWithin(bill: EnsureOccurrencesBillFields, floor: string | null, horizon: string): string[] {
   if (bill.frequency === "ONE_TIME") {
-    if (bill.firstDueDate > horizon) return [];
-    if (floor !== null && bill.firstDueDate < floor) return [];
-    return [bill.firstDueDate];
+    return bill.firstDueDate <= horizon ? [bill.firstDueDate] : [];
   }
   const dates: string[] = [];
   for (let sequence = 0; ; sequence++) {
@@ -112,9 +114,17 @@ function ruleDatesWithin(bill: EnsureOccurrencesBillFields, floor: string | null
  * (the unique `(billId, sequence)` index already occupied), leaving a permanent hole. Matching by
  * date instead means a locked row simply keeps its own historical date forever, and the current
  * rule's dates are generated/removed independently of what sequence numbers happen to exist.
+ *
+ * `isInitialGeneration` must be `true` ONLY from `createBill`'s own call, immediately after insert —
+ * every other caller (`updateBill`, `resumeBill`, `unarchiveBill`, the `/sync` route) passes `false`.
+ * This used to be inferred from "does this bill have zero existing occurrences" — which is exploitable:
+ * delete/age out every row for a bill that's already been generated once (e.g. shorten `endDate` into
+ * the past) and the NEXT plain resync would be wrongly read as "first generation" again, backfilling
+ * a fresh flood of overdue history from a passive, read-gated `/sync` call. Making it an explicit,
+ * one-time flag tied to bill creation removes that path entirely.
  */
 export async function ensureOccurrences(
-  deps: Deps, actorUserId: string, membership: Membership, bill: EnsureOccurrencesBillFields, ip?: string,
+  deps: Deps, actorUserId: string, membership: Membership, bill: EnsureOccurrencesBillFields, isInitialGeneration: boolean, ip?: string,
 ): Promise<void> {
   if (bill.status !== "ACTIVE") return;
 
@@ -127,13 +137,13 @@ export async function ensureOccurrences(
     const existingRows = await tx.select().from(billOccurrences)
       .where(and(eq(billOccurrences.householdId, bill.householdId), eq(billOccurrences.billId, bill.id)));
 
-    const isFirstGeneration = existingRows.length === 0;
-    // First generation backfills overdue history (clamped to 12 months back, so a very old
-    // `firstDueDate` can't produce an unbounded number of historical rows). A resync (the bill
-    // already has at least one occurrence, locked or not) only ever looks forward — a frequency
-    // correction shouldn't suddenly manufacture a flood of newly-overdue bills.
-    let neededDates = isFirstGeneration ? ruleDatesWithin(bill, oneYearAgo(today), horizon) : ruleDatesWithin(bill, null, horizon);
-    if (!isFirstGeneration) neededDates = neededDates.filter((d) => d > today);
+    // Initial generation backfills overdue history (clamped to 12 months back for recurring
+    // frequencies, so a very old `firstDueDate` can't produce an unbounded number of historical
+    // rows — ONE_TIME is exempt from that floor, see `ruleDatesWithin`). Every other resync only
+    // ever looks forward — a frequency correction (or a passive `/sync` call) shouldn't suddenly
+    // manufacture a flood of newly-overdue bills.
+    let neededDates = isInitialGeneration ? ruleDatesWithin(bill, oneYearAgo(today), horizon) : ruleDatesWithin(bill, null, horizon);
+    if (!isInitialGeneration) neededDates = neededDates.filter((d) => d > today);
     const neededSet = new Set(neededDates);
 
     const unlockedByDate = new Map<string, OccurrenceRow>();
@@ -172,6 +182,37 @@ export async function ensureOccurrences(
         newValue: { inserted: insertedCount, deleted: deletedCount, skippedDuplicate: skippedDuplicateCount }, ipAddress: ip ?? null,
       });
     }
+  });
+}
+
+/**
+ * A deliberate re-pricing, distinct from `ensureOccurrences`'s "never touch `amountDuePaise` on an
+ * existing row" rule. That rule exists to stop an INCIDENTAL resync — a frequency/date change, a
+ * pause/resume, the passive `/sync` endpoint — from clobbering a human's manual
+ * `updateOccurrenceAmount` correction. It was never meant to mean a bill's amount can never
+ * propagate to its own occurrences at all. Changing the bill's `amountPaise` is the household
+ * directly and explicitly re-pricing the bill, so it's expected (and here, unconditional) to
+ * cascade — including overriding an earlier manual correction — to every occurrence still open to
+ * change: `PENDING`, nothing paid, not yet due. Locked (paid/partial/waived) and past-due
+ * occurrences are untouched, same protection as everywhere else in this feature.
+ */
+export async function applyAmountChange(
+  deps: Deps, actorUserId: string, membership: Membership, bill: { id: string; householdId: string }, amountDuePaise: number, ip?: string,
+): Promise<void> {
+  const today = dateInZone(deps.clock.now(), membership.timezone);
+  await deps.db.transaction(async (tx) => {
+    const candidates = await tx.select().from(billOccurrences).where(and(
+      eq(billOccurrences.householdId, bill.householdId), eq(billOccurrences.billId, bill.id),
+      eq(billOccurrences.status, "PENDING"), eq(billOccurrences.amountPaidPaise, 0),
+    ));
+    const targetIds = candidates.filter((row) => row.dueDate > today && row.amountDuePaise !== amountDuePaise).map((row) => row.id);
+    if (targetIds.length === 0) return;
+
+    await tx.update(billOccurrences).set({ amountDuePaise }).where(inArray(billOccurrences.id, targetIds));
+    await recordAudit(tx, {
+      householdId: bill.householdId, actorUserId, action: "bill.occurrenceAmountsRepriced", entityType: "bill", entityId: bill.id,
+      newValue: { amountDuePaise, count: targetIds.length }, ipAddress: ip ?? null,
+    });
   });
 }
 

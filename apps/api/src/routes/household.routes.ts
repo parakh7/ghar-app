@@ -212,7 +212,7 @@ export function householdRoutes(deps: Deps): Router {
   // sync can no longer touch a manually-set occurrence amount, so the premise still holds.)
   r.post("/:householdId/bills/:id/occurrences/sync", requireHousehold(deps, "bills.view"), async (req, res) => {
     const bill = await billOccurrences.requireBillForSync(deps, req.membership!, req.params.id as string);
-    await billOccurrences.ensureOccurrences(deps, req.auth!.user.id, req.membership!, bill, req.ip);
+    await billOccurrences.ensureOccurrences(deps, req.auth!.user.id, req.membership!, bill, false, req.ip);
     ok(res, await billOccurrences.listOccurrences(deps, req.membership!, req.params.id as string));
   });
 
