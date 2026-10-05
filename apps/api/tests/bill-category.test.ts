@@ -113,7 +113,7 @@ describe("bill categories", () => {
     const owner = await signupUser(ctx);
     const h = await createHousehold(ctx, owner.cookie);
     const all = await ctx.db.select().from(billCategories).where(eq(billCategories.householdId, h.id)).orderBy(billCategories.sortOrder);
-    const [internet, mobile] = [all[1]!, all[2]!]; // Internet is index 1, Mobile is index 2
+    const [internet] = [all[1]!]; // Internet is index 1; will swap with Mobile at index 2
     await ctx.request.post(`/api/households/${h.id}/bill-categories/${internet.id}/move`).set(csrf).set("cookie", owner.cookie).send({ direction: "down" });
     const listRes = await ctx.request.get(`/api/households/${h.id}/bill-categories`).set("cookie", owner.cookie);
     expect(listRes.body.data[1].name).toBe("Mobile");
