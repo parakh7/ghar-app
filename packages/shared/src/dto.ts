@@ -20,6 +20,16 @@ export type InviteDTO = { id: string; email: string; role: HouseholdRole; expire
 export type CategoryDTO = { id: string; name: string; sortOrder: number; isActive: boolean };
 export type BillCategoryDTO = { id: string; name: string; icon: string | null; sortOrder: number; isActive: boolean };
 
+export type BillFrequency = "ONE_TIME" | "WEEKLY" | "MONTHLY" | "QUARTERLY" | "HALF_YEARLY" | "YEARLY" | "CUSTOM";
+export type BillStatus = "ACTIVE" | "PAUSED" | "ARCHIVED";
+
+export type BillDTO = {
+  id: string; name: string; categoryId: string | null; provider: string | null; accountNumber: string | null;
+  amountPaise: number | null; frequency: BillFrequency; intervalCount: number; intervalUnit: string | null;
+  firstDueDate: string; endDate: string | null; paymentMethod: PaymentMethod | null; autopay: boolean;
+  status: BillStatus; notes: string | null; archivedAt: string | null; createdAt: string;
+};
+
 export type HousehelpDTO = {
   id: string; name: string; phone: string | null; roleTitle: string | null;
   status: "ACTIVE" | "INACTIVE"; startDate: string | null; endDate: string | null;

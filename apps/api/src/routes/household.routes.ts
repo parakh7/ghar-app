@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { createAdjustmentSchema, createBillCategorySchema, createCategorySchema, createChecklistTaskSchema, createHousehelpSchema, createHouseholdSchema, dateSchema, generateSettlementSchema, inviteMemberSchema, markAttendanceSchema, markCompletionSchema, markHolidaySchema, monthSchema, moveCategorySchema, putAssignmentsSchema, recordPaymentSchema, updateBillCategorySchema, updateCategorySchema, updateChecklistTaskSchema, updateHousehelpSchema, updateHouseholdSchema, updateMemberSchema, updateScheduleSchema, voidReasonSchema } from "@household/shared";
+import { billStatusSchema, createAdjustmentSchema, createBillCategorySchema, createBillSchema, createCategorySchema, createChecklistTaskSchema, createHousehelpSchema, createHouseholdSchema, dateSchema, generateSettlementSchema, inviteMemberSchema, markAttendanceSchema, markCompletionSchema, markHolidaySchema, monthSchema, moveCategorySchema, putAssignmentsSchema, recordPaymentSchema, updateBillCategorySchema, updateBillSchema, updateCategorySchema, updateChecklistTaskSchema, updateHousehelpSchema, updateHouseholdSchema, updateMemberSchema, updateScheduleSchema, voidReasonSchema } from "@household/shared";
 import { requireAuth } from "../middleware/auth.js";
 import { requireHousehold } from "../middleware/household.js";
 import { inviteLimiter } from "../middleware/rate-limit.js";
@@ -9,6 +9,7 @@ import { Errors } from "../lib/errors.js";
 import type { Deps } from "../services/deps.js";
 import * as attendance from "../services/attendance.service.js";
 import * as billCategories from "../services/bill-category.service.js";
+import * as bills from "../services/bill.service.js";
 import * as categories from "../services/category.service.js";
 import * as checklistAssignments from "../services/checklist-assignment.service.js";
 import * as checklistCompletions from "../services/checklist-completion.service.js";
@@ -135,6 +136,50 @@ export function householdRoutes(deps: Deps): Router {
     const { direction } = parseBody(req, moveCategorySchema);
     await billCategories.moveBillCategory(deps, req.auth!.user.id, req.membership!.householdId, req.params.categoryId as string, direction, req.ip);
     ok(res, null, 200, "Bill category moved.");
+  });
+
+  r.get("/:householdId/bills", requireHousehold(deps, "bills.view"), async (req, res) => {
+    let status: "ACTIVE" | "PAUSED" | "ARCHIVED" | undefined;
+    if (req.query.status !== undefined) {
+      const parsed = billStatusSchema.safeParse(req.query.status);
+      if (!parsed.success) throw Errors.validation({ status: "Use ACTIVE, PAUSED, or ARCHIVED." });
+      status = parsed.data;
+    }
+    ok(res, await bills.listBills(deps, req.membership!, { status }));
+  });
+
+  r.post("/:householdId/bills", requireHousehold(deps, "bills.manage"), async (req, res) => {
+    const input = parseBody(req, createBillSchema);
+    ok(res, await bills.createBill(deps, req.auth!.user.id, req.membership!, input, req.ip), 201, "Bill added.");
+  });
+
+  r.get("/:householdId/bills/:id", requireHousehold(deps, "bills.view"), async (req, res) => {
+    ok(res, await bills.getBill(deps, req.membership!, req.params.id as string));
+  });
+
+  r.patch("/:householdId/bills/:id", requireHousehold(deps, "bills.manage"), async (req, res) => {
+    const patch = parseBody(req, updateBillSchema);
+    ok(res, await bills.updateBill(deps, req.auth!.user.id, req.membership!, req.params.id as string, patch, req.ip), 200, "Bill updated.");
+  });
+
+  r.post("/:householdId/bills/:id/pause", requireHousehold(deps, "bills.manage"), async (req, res) => {
+    await bills.pauseBill(deps, req.auth!.user.id, req.membership!, req.params.id as string, req.ip);
+    ok(res, null, 200, "Bill paused.");
+  });
+
+  r.post("/:householdId/bills/:id/resume", requireHousehold(deps, "bills.manage"), async (req, res) => {
+    await bills.resumeBill(deps, req.auth!.user.id, req.membership!, req.params.id as string, req.ip);
+    ok(res, null, 200, "Bill resumed.");
+  });
+
+  r.post("/:householdId/bills/:id/archive", requireHousehold(deps, "bills.manage"), async (req, res) => {
+    await bills.archiveBill(deps, req.auth!.user.id, req.membership!, req.params.id as string, req.ip);
+    ok(res, null, 200, "Bill archived.");
+  });
+
+  r.post("/:householdId/bills/:id/unarchive", requireHousehold(deps, "bills.manage"), async (req, res) => {
+    await bills.unarchiveBill(deps, req.auth!.user.id, req.membership!, req.params.id as string, req.ip);
+    ok(res, null, 200, "Bill restored.");
   });
 
   r.get("/:householdId/househelps", requireHousehold(deps, "househelps.view"), async (req, res) => {
