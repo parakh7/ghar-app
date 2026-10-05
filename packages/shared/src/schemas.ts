@@ -59,6 +59,16 @@ export const updateCategorySchema = z.object({
 }).refine((v) => v.name !== undefined || v.isActive !== undefined, { message: "Provide a name or active state to update." });
 export const moveCategorySchema = z.object({ direction: z.enum(["up", "down"]) });
 
+export const createBillCategorySchema = z.object({
+  name: z.string().trim().min(1, "Give the category a name").max(60),
+  icon: z.string().trim().max(60).optional(),
+});
+export const updateBillCategorySchema = z.object({
+  name: z.string().trim().min(1, "Give the category a name").max(60).optional(),
+  icon: z.string().trim().max(60).nullable().optional(),
+  isActive: z.boolean().optional(),
+}).refine((v) => v.name !== undefined || v.icon !== undefined || v.isActive !== undefined, { message: "Provide a name, icon, or active state to update." });
+
 export const createHousehelpSchema = z.object({
   name: z.string().trim().min(1, "Give the househelp a name").max(80),
   phone: z.string().trim().max(20).optional(),
@@ -99,6 +109,8 @@ export const updateScheduleSchema = z.object({
 export type CreateCategoryInput = z.infer<typeof createCategorySchema>;
 export type UpdateCategoryInput = z.infer<typeof updateCategorySchema>;
 export type MoveCategoryInput = z.infer<typeof moveCategorySchema>;
+export type CreateBillCategoryInput = z.infer<typeof createBillCategorySchema>;
+export type UpdateBillCategoryInput = z.infer<typeof updateBillCategorySchema>;
 export type CreateHousehelpInput = z.input<typeof createHousehelpSchema>;
 export type UpdateHousehelpInput = z.infer<typeof updateHousehelpSchema>;
 export type UpdateScheduleInput = z.infer<typeof updateScheduleSchema>;

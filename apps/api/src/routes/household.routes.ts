@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { createAdjustmentSchema, createCategorySchema, createChecklistTaskSchema, createHousehelpSchema, createHouseholdSchema, dateSchema, generateSettlementSchema, inviteMemberSchema, markAttendanceSchema, markCompletionSchema, markHolidaySchema, monthSchema, moveCategorySchema, putAssignmentsSchema, recordPaymentSchema, updateCategorySchema, updateChecklistTaskSchema, updateHousehelpSchema, updateHouseholdSchema, updateMemberSchema, updateScheduleSchema, voidReasonSchema } from "@household/shared";
+import { createAdjustmentSchema, createBillCategorySchema, createCategorySchema, createChecklistTaskSchema, createHousehelpSchema, createHouseholdSchema, dateSchema, generateSettlementSchema, inviteMemberSchema, markAttendanceSchema, markCompletionSchema, markHolidaySchema, monthSchema, moveCategorySchema, putAssignmentsSchema, recordPaymentSchema, updateBillCategorySchema, updateCategorySchema, updateChecklistTaskSchema, updateHousehelpSchema, updateHouseholdSchema, updateMemberSchema, updateScheduleSchema, voidReasonSchema } from "@household/shared";
 import { requireAuth } from "../middleware/auth.js";
 import { requireHousehold } from "../middleware/household.js";
 import { inviteLimiter } from "../middleware/rate-limit.js";
@@ -8,6 +8,7 @@ import { ok } from "../lib/respond.js";
 import { Errors } from "../lib/errors.js";
 import type { Deps } from "../services/deps.js";
 import * as attendance from "../services/attendance.service.js";
+import * as billCategories from "../services/bill-category.service.js";
 import * as categories from "../services/category.service.js";
 import * as checklistAssignments from "../services/checklist-assignment.service.js";
 import * as checklistCompletions from "../services/checklist-completion.service.js";
@@ -109,6 +110,31 @@ export function householdRoutes(deps: Deps): Router {
     const { direction } = parseBody(req, moveCategorySchema);
     await categories.moveCategory(deps, req.auth!.user.id, req.membership!.householdId, req.params.categoryId as string, direction, req.ip);
     ok(res, null, 200, "Category moved.");
+  });
+
+  r.get("/:householdId/bill-categories", requireHousehold(deps, "bills.view"), async (req, res) => {
+    ok(res, await billCategories.listBillCategories(deps.db, req.membership!.householdId));
+  });
+
+  r.post("/:householdId/bill-categories", requireHousehold(deps, "bills.manage"), async (req, res) => {
+    const input = parseBody(req, createBillCategorySchema);
+    ok(res, await billCategories.createBillCategory(deps, req.auth!.user.id, req.membership!.householdId, input, req.ip), 201, "Bill category added.");
+  });
+
+  r.patch("/:householdId/bill-categories/:categoryId", requireHousehold(deps, "bills.manage"), async (req, res) => {
+    const patch = parseBody(req, updateBillCategorySchema);
+    ok(res, await billCategories.updateBillCategory(deps, req.auth!.user.id, req.membership!.householdId, req.params.categoryId as string, patch, req.ip), 200, "Bill category updated.");
+  });
+
+  r.delete("/:householdId/bill-categories/:categoryId", requireHousehold(deps, "bills.manage"), async (req, res) => {
+    await billCategories.softDeleteBillCategory(deps, req.auth!.user.id, req.membership!.householdId, req.params.categoryId as string, req.ip);
+    ok(res, null, 200, "Bill category removed.");
+  });
+
+  r.post("/:householdId/bill-categories/:categoryId/move", requireHousehold(deps, "bills.manage"), async (req, res) => {
+    const { direction } = parseBody(req, moveCategorySchema);
+    await billCategories.moveBillCategory(deps, req.auth!.user.id, req.membership!.householdId, req.params.categoryId as string, direction, req.ip);
+    ok(res, null, 200, "Bill category moved.");
   });
 
   r.get("/:householdId/househelps", requireHousehold(deps, "househelps.view"), async (req, res) => {

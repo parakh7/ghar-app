@@ -18,6 +18,7 @@ export type MemberDTO = { userId: string; name: string; email: string; role: Hou
 export type InviteDTO = { id: string; email: string; role: HouseholdRole; expiresAt: string; createdAt: string };
 
 export type CategoryDTO = { id: string; name: string; sortOrder: number; isActive: boolean };
+export type BillCategoryDTO = { id: string; name: string; icon: string | null; sortOrder: number; isActive: boolean };
 
 export type HousehelpDTO = {
   id: string; name: string; phone: string | null; roleTitle: string | null;
