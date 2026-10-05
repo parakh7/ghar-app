@@ -1,5 +1,4 @@
 import { Navigate, Route, Routes } from "react-router-dom";
-import { ReceiptIndianRupee } from "lucide-react";
 import { ForgotPasswordPage } from "./features/auth/ForgotPasswordPage";
 import { ResetPasswordPage } from "./features/auth/ResetPasswordPage";
 import { SignInPage } from "./features/auth/SignInPage";
@@ -8,11 +7,14 @@ import { VerifyEmailPage } from "./features/auth/VerifyEmailPage";
 import { AppShell } from "./features/app/AppShell";
 import { HousehelpCalendarPage } from "./features/app/attendance/HousehelpCalendarPage";
 import { TodayPage } from "./features/app/attendance/TodayPage";
+import { BillCategoriesPage } from "./features/app/bills/BillCategoriesPage";
+import { BillDetailPage } from "./features/app/bills/BillDetailPage";
+import { BillFormPage } from "./features/app/bills/BillFormPage";
+import { BillsListPage } from "./features/app/bills/BillsListPage";
 import { ChecklistListPage } from "./features/app/checklist/ChecklistListPage";
 import { ChecklistTaskDetailPage } from "./features/app/checklist/ChecklistTaskDetailPage";
 import { ChecklistTaskFormPage } from "./features/app/checklist/ChecklistTaskFormPage";
 import { ChecklistTodayPage } from "./features/app/checklist/ChecklistTodayPage";
-import { ComingSoonPage } from "./features/app/ComingSoonPage";
 import { RedirectIfSignedIn, RequireAuth } from "./features/app/guards";
 import { HomePage } from "./features/app/HomePage";
 import { CategoriesPage } from "./features/app/househelps/CategoriesPage";
@@ -55,7 +57,11 @@ export function App() {
         <Route path="checklist/:id/edit" element={<ChecklistTaskFormPage mode="edit" />} />
         <Route path="salary" element={<SalaryListPage />} />
         <Route path="salary/:id" element={<SettlementDetailPage />} />
-        <Route path="bills" element={<ComingSoonPage title="Bills" icon={<ReceiptIndianRupee size={22} />} heading="Keep track of your monthly bills here." text="Bills, due dates and reminders are coming soon." />} />
+        <Route path="bills" element={<BillsListPage />} />
+        <Route path="bills/categories" element={<BillCategoriesPage />} />
+        <Route path="bills/new" element={<BillFormPage mode="create" />} />
+        <Route path="bills/:id" element={<BillDetailPage />} />
+        <Route path="bills/:id/edit" element={<BillFormPage mode="edit" />} />
         <Route path="members" element={<MembersPage />} />
         <Route path="more" element={<MorePage />} />
       </Route>
