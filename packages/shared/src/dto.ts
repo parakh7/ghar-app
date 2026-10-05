@@ -30,6 +30,14 @@ export type BillDTO = {
   status: BillStatus; notes: string | null; archivedAt: string | null; createdAt: string;
 };
 
+export type OccurrenceStatus = "PENDING" | "PARTIALLY_PAID" | "PAID" | "WAIVED";
+
+export type BillOccurrenceDTO = {
+  id: string; billId: string; sequence: number; dueDate: string;
+  amountDuePaise: number; amountPaidPaise: number; status: OccurrenceStatus;
+  paidAt: string | null; waivedAt: string | null; createdAt: string;
+};
+
 export type HousehelpDTO = {
   id: string; name: string; phone: string | null; roleTitle: string | null;
   status: "ACTIVE" | "INACTIVE"; startDate: string | null; endDate: string | null;

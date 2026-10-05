@@ -5,3 +5,4 @@ export * from "./time.js";
 export * from "./schemas.js";
 export * from "./dto.js";
 export * from "./checklist-frequency.js";
+export * from "./bill-occurrence.js";

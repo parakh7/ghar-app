@@ -320,3 +320,6 @@ export const updateBillSchema = z.object({
 
 export type CreateBillInput = z.input<typeof createBillSchema>;
 export type UpdateBillInput = z.infer<typeof updateBillSchema>;
+
+export const updateOccurrenceAmountSchema = z.object({ amountDuePaise: paiseSchema });
+export type UpdateOccurrenceAmountInput = z.infer<typeof updateOccurrenceAmountSchema>;
