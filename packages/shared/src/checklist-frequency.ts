@@ -5,12 +5,14 @@ function isoWeekdayOf(date: string): number {
   return ((new Date(`${date}T00:00:00Z`).getUTCDay() + 6) % 7) + 1;
 }
 
-function daysInMonth(year: number, month: number): number {
+/** Exported so other date-math modules in this package (e.g. bill-occurrence.ts) don't redefine it. */
+export function daysInMonth(year: number, month: number): number {
   // Date.UTC's day-0 trick: month (1-based) as the 0-based monthIndex rolls back to the last day of the prior (target) month.
   return new Date(Date.UTC(year, month, 0)).getUTCDate();
 }
 
-function parseDateParts(date: string): { year: number; month: number; day: number } {
+/** Exported so other date-math modules in this package (e.g. bill-occurrence.ts) don't redefine it. */
+export function parseDateParts(date: string): { year: number; month: number; day: number } {
   const parts = date.split("-");
   return { year: Number(parts[0]), month: Number(parts[1]), day: Number(parts[2]) };
 }

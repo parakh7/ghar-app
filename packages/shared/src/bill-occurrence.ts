@@ -1,17 +1,10 @@
+import { daysInMonth, parseDateParts } from "./checklist-frequency.js";
 import type { BillDTO } from "./dto.js";
 import { addDays } from "./time.js";
 
-type OccurrenceDueDateFields = Pick<BillDTO, "frequency" | "intervalCount" | "intervalUnit" | "firstDueDate">;
+export class BillOccurrenceError extends Error {}
 
-/** Same Date.UTC(year, month, 0) trick as checklist-frequency.ts's daysInMonth: `month` is 1-based here. */
-function daysInMonth(year: number, month: number): number {
-  return new Date(Date.UTC(year, month, 0)).getUTCDate();
-}
-
-function parseDateParts(date: string): { year: number; month: number; day: number } {
-  const parts = date.split("-");
-  return { year: Number(parts[0]), month: Number(parts[1]), day: Number(parts[2]) };
-}
+export type OccurrenceDueDateFields = Pick<BillDTO, "frequency" | "intervalCount" | "intervalUnit" | "firstDueDate">;
 
 /**
  * Add `months` calendar months to `date` (YYYY-MM-DD), clamping the result's day-of-month to the
@@ -36,7 +29,7 @@ function addMonthsClamped(date: string, months: number): string {
 export function occurrenceDueDate(bill: OccurrenceDueDateFields, sequence: number): string {
   switch (bill.frequency) {
     case "ONE_TIME":
-      if (sequence !== 0) throw new Error("ONE_TIME bills have exactly one occurrence (sequence must be 0).");
+      if (sequence !== 0) throw new BillOccurrenceError("ONE_TIME bills have exactly one occurrence (sequence must be 0).");
       return bill.firstDueDate;
     case "WEEKLY":
       return addDays(bill.firstDueDate, sequence * 7);
@@ -57,10 +50,10 @@ export function occurrenceDueDate(bill: OccurrenceDueDateFields, sequence: numbe
         case "month":
           return addMonthsClamped(bill.firstDueDate, sequence * bill.intervalCount);
         default:
-          throw new Error(`CUSTOM bill is missing a valid intervalUnit: ${String(bill.intervalUnit)}`);
+          throw new BillOccurrenceError(`CUSTOM bill is missing a valid intervalUnit: ${String(bill.intervalUnit)}`);
       }
     }
     default:
-      throw new Error(`Unknown bill frequency: ${String(bill.frequency)}`);
+      throw new BillOccurrenceError(`Unknown bill frequency: ${String(bill.frequency)}`);
   }
 }
