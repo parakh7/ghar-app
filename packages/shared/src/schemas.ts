@@ -234,10 +234,12 @@ export const createAdjustmentSchema = z.object({
   reason: z.string().trim().max(500).optional(),
 });
 
+export const paymentMethodSchema = z.enum(["CASH", "UPI", "BANK_TRANSFER", "CARD", "AUTO_DEBIT", "CHEQUE", "OTHER"]);
+
 export const recordPaymentSchema = z.object({
   amountPaise: paiseSchema.refine((v) => v > 0, "Amount must be positive"),
   paidOn: dateSchema,
-  method: z.enum(["CASH", "UPI", "BANK_TRANSFER", "CARD", "AUTO_DEBIT", "CHEQUE", "OTHER"]),
+  method: paymentMethodSchema,
   reference: z.string().trim().max(200).optional(),
   notes: z.string().trim().max(500).optional(),
 });
@@ -252,7 +254,6 @@ export type RecordPaymentInput = z.infer<typeof recordPaymentSchema>;
 export const billFrequencySchema = z.enum(["ONE_TIME", "WEEKLY", "MONTHLY", "QUARTERLY", "HALF_YEARLY", "YEARLY", "CUSTOM"]);
 export const billStatusSchema = z.enum(["ACTIVE", "PAUSED", "ARCHIVED"]);
 const billIntervalUnitSchema = z.enum(["day", "week", "month"]);
-const paymentMethodSchema = z.enum(["CASH", "UPI", "BANK_TRANSFER", "CARD", "AUTO_DEBIT", "CHEQUE", "OTHER"]);
 
 type BillFrequencyConfigFields = { intervalCount?: number; intervalUnit?: "day" | "week" | "month" };
 
@@ -260,11 +261,12 @@ type BillFrequencyConfigFields = { intervalCount?: number; intervalUnit?: "day" 
  * CUSTOM is the only bill frequency with a configurable interval — every other frequency has an
  * implicit fixed cadence (e.g. MONTHLY = every month), so a client-supplied intervalCount/intervalUnit
  * on those would be ambiguous (which cadence wins?) and is rejected outright.
+ * intervalCount's own ">= 1" check lives on the field schema (`.min(1, "Must be at least 1.")`) —
+ * not duplicated here, since Zod runs field checks first and would otherwise shadow this message.
  */
 function checkBillFrequencyConfig(v: { frequency: z.infer<typeof billFrequencySchema> } & BillFrequencyConfigFields, ctx: z.RefinementCtx): void {
   if (v.frequency === "CUSTOM") {
     if (v.intervalUnit === undefined) ctx.addIssue({ code: "custom", path: ["intervalUnit"], message: "Give the interval unit for a custom-frequency bill." });
-    if (v.intervalCount !== undefined && v.intervalCount < 1) ctx.addIssue({ code: "custom", path: ["intervalCount"], message: "Must be at least 1." });
   } else {
     if (v.intervalCount !== undefined) ctx.addIssue({ code: "custom", path: ["intervalCount"], message: `Not used for a ${v.frequency} bill.` });
     if (v.intervalUnit !== undefined) ctx.addIssue({ code: "custom", path: ["intervalUnit"], message: `Not used for a ${v.frequency} bill.` });
@@ -278,7 +280,7 @@ export const createBillSchema = z.object({
   accountNumber: z.string().trim().max(120).optional(),
   amountPaise: paiseSchema.nullable().optional(),
   frequency: billFrequencySchema,
-  intervalCount: z.number().int().min(1).optional(),
+  intervalCount: z.number().int().min(1, "Must be at least 1.").optional(),
   intervalUnit: billIntervalUnitSchema.optional(),
   firstDueDate: dateSchema,
   endDate: dateSchema.nullable().optional(),
@@ -297,7 +299,7 @@ export const updateBillSchema = z.object({
   accountNumber: z.string().trim().max(120).nullable().optional(),
   amountPaise: paiseSchema.nullable().optional(),
   frequency: billFrequencySchema.optional(),
-  intervalCount: z.number().int().min(1).optional(),
+  intervalCount: z.number().int().min(1, "Must be at least 1.").optional(),
   intervalUnit: billIntervalUnitSchema.optional(),
   firstDueDate: dateSchema.optional(),
   endDate: dateSchema.nullable().optional(),
@@ -311,13 +313,10 @@ export const updateBillSchema = z.object({
     return;
   }
   checkBillFrequencyConfig(v as { frequency: z.infer<typeof billFrequencySchema> } & BillFrequencyConfigFields, ctx);
-}).superRefine((v, ctx) => {
-  // endDate vs firstDueDate can only be fully checked here when both are present in the same patch;
-  // the case where only endDate changes against an existing firstDueDate is re-checked in the service.
-  if (v.firstDueDate !== undefined && v.endDate !== undefined && v.endDate !== null && v.endDate < v.firstDueDate) {
-    ctx.addIssue({ code: "custom", path: ["endDate"], message: "End date must be on or after the first due date." });
-  }
 }).refine((v) => Object.values(v).some((x) => x !== undefined), { message: "Provide at least one field to update." });
+// endDate vs firstDueDate is NOT re-checked here when only one of the pair is present in the patch —
+// that case can only be judged against the bill's stored value, so bill.service.ts's updateBill does
+// it there (same message), against the row it already holds locked.
 
 export type CreateBillInput = z.input<typeof createBillSchema>;
 export type UpdateBillInput = z.infer<typeof updateBillSchema>;

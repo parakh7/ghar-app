@@ -145,7 +145,7 @@ export function householdRoutes(deps: Deps): Router {
       if (!parsed.success) throw Errors.validation({ status: "Use ACTIVE, PAUSED, or ARCHIVED." });
       status = parsed.data;
     }
-    ok(res, await bills.listBills(deps, req.membership!, { status }));
+    ok(res, await bills.listBills(deps, req.membership!, { status, includeArchived: req.query.includeArchived === "true" }));
   });
 
   r.post("/:householdId/bills", requireHousehold(deps, "bills.manage"), async (req, res) => {

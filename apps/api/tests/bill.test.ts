@@ -67,21 +67,27 @@ describe("bill definitions", () => {
     expect(res.body.data).toMatchObject({ intervalCount: 1, intervalUnit: "day" });
   });
 
-  it("rejects intervalUnit set on a MONTHLY bill", async () => {
-    const owner = await signupUser(ctx);
-    const h = await createHousehold(ctx, owner.cookie);
-    const res = await ctx.request.post(`/api/households/${h.id}/bills`).set(csrf).set("cookie", owner.cookie)
-      .send({ ...monthly, intervalUnit: "day" });
-    expect(res.status).toBe(400);
-  });
+  it.each(["ONE_TIME", "WEEKLY", "MONTHLY", "QUARTERLY", "HALF_YEARLY", "YEARLY"])(
+    "rejects intervalUnit set on a %s bill",
+    async (frequency) => {
+      const owner = await signupUser(ctx);
+      const h = await createHousehold(ctx, owner.cookie);
+      const res = await ctx.request.post(`/api/households/${h.id}/bills`).set(csrf).set("cookie", owner.cookie)
+        .send({ name: `${frequency} bill`, frequency, firstDueDate: "2026-11-05", intervalUnit: "day" });
+      expect(res.status).toBe(400);
+    },
+  );
 
-  it("rejects intervalCount set on a WEEKLY bill", async () => {
-    const owner = await signupUser(ctx);
-    const h = await createHousehold(ctx, owner.cookie);
-    const res = await ctx.request.post(`/api/households/${h.id}/bills`).set(csrf).set("cookie", owner.cookie)
-      .send({ name: "Weekly bill", frequency: "WEEKLY", firstDueDate: "2026-11-05", intervalCount: 2 });
-    expect(res.status).toBe(400);
-  });
+  it.each(["ONE_TIME", "WEEKLY", "MONTHLY", "QUARTERLY", "HALF_YEARLY", "YEARLY"])(
+    "rejects intervalCount set on a %s bill",
+    async (frequency) => {
+      const owner = await signupUser(ctx);
+      const h = await createHousehold(ctx, owner.cookie);
+      const res = await ctx.request.post(`/api/households/${h.id}/bills`).set(csrf).set("cookie", owner.cookie)
+        .send({ name: `${frequency} bill`, frequency, firstDueDate: "2026-11-05", intervalCount: 2 });
+      expect(res.status).toBe(400);
+    },
+  );
 
   it("rejects a CUSTOM bill missing intervalUnit", async () => {
     const owner = await signupUser(ctx);
@@ -196,6 +202,18 @@ describe("bill definitions", () => {
     expect(res.body.data[0].id).toBe(id);
   });
 
+  it("includeArchived=true returns every status in one request", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    const createRes = await ctx.request.post(`/api/households/${h.id}/bills`).set(csrf).set("cookie", owner.cookie).send(monthly);
+    const id = createRes.body.data.id;
+    await ctx.request.post(`/api/households/${h.id}/bills`).set(csrf).set("cookie", owner.cookie).send({ name: "Second bill", frequency: "MONTHLY", firstDueDate: "2026-11-05" });
+    await ctx.request.post(`/api/households/${h.id}/bills/${id}/archive`).set(csrf).set("cookie", owner.cookie);
+    const res = await ctx.request.get(`/api/households/${h.id}/bills?includeArchived=true`).set("cookie", owner.cookie);
+    expect(res.status).toBe(200);
+    expect(res.body.data).toHaveLength(2);
+  });
+
   it("rejects an invalid status filter value", async () => {
     const owner = await signupUser(ctx);
     const h = await createHousehold(ctx, owner.cookie);
@@ -242,6 +260,29 @@ describe("bill definitions", () => {
     const res = await ctx.request.patch(`/api/households/${h.id}/bills/${id}`).set(csrf).set("cookie", owner.cookie).send({ frequency: "MONTHLY" });
     expect(res.status).toBe(200);
     expect(res.body.data).toMatchObject({ frequency: "MONTHLY", intervalCount: 1, intervalUnit: null });
+  });
+
+  it("resending CUSTOM with only a new intervalUnit preserves the existing intervalCount", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    const createRes = await ctx.request.post(`/api/households/${h.id}/bills`).set(csrf).set("cookie", owner.cookie)
+      .send({ name: "Custom bill", frequency: "CUSTOM", intervalCount: 3, intervalUnit: "month", firstDueDate: "2026-11-05" });
+    const id = createRes.body.data.id;
+    const res = await ctx.request.patch(`/api/households/${h.id}/bills/${id}`).set(csrf).set("cookie", owner.cookie)
+      .send({ frequency: "CUSTOM", intervalUnit: "month" });
+    expect(res.status).toBe(200);
+    expect(res.body.data).toMatchObject({ frequency: "CUSTOM", intervalCount: 3, intervalUnit: "month" });
+  });
+
+  it("switching frequency to CUSTOM from a different frequency defaults intervalCount to 1 when omitted", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    const createRes = await ctx.request.post(`/api/households/${h.id}/bills`).set(csrf).set("cookie", owner.cookie).send(monthly);
+    const id = createRes.body.data.id;
+    const res = await ctx.request.patch(`/api/households/${h.id}/bills/${id}`).set(csrf).set("cookie", owner.cookie)
+      .send({ frequency: "CUSTOM", intervalUnit: "day" });
+    expect(res.status).toBe(200);
+    expect(res.body.data).toMatchObject({ frequency: "CUSTOM", intervalCount: 1, intervalUnit: "day" });
   });
 
   it("switching frequency to CUSTOM requires intervalUnit", async () => {
@@ -292,13 +333,26 @@ describe("bill definitions", () => {
     expect(log.newValue).toMatchObject({ provider: "BESCOM" });
   });
 
+  it("PATCH silently strips an unrecognized status field and leaves the bill's actual status untouched", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    const createRes = await ctx.request.post(`/api/households/${h.id}/bills`).set(csrf).set("cookie", owner.cookie).send(monthly);
+    const id = createRes.body.data.id;
+    const res = await ctx.request.patch(`/api/households/${h.id}/bills/${id}`).set(csrf).set("cookie", owner.cookie)
+      .send({ provider: "BESCOM", status: "ARCHIVED" });
+    expect(res.status).toBe(200);
+    expect(res.body.data.status).toBe("ACTIVE");
+    const [row] = await ctx.db.select().from(bills).where(eq(bills.id, id));
+    expect(row!.status).toBe("ACTIVE");
+  });
+
   describe("status transitions", () => {
     async function createActiveBill(h: { id: string }, cookie: string) {
       const res = await ctx.request.post(`/api/households/${h.id}/bills`).set(csrf).set("cookie", cookie).send(monthly);
       return res.body.data.id as string;
     }
 
-    it("pauses an active bill", async () => {
+    it("pauses an active bill and records an audit log entry", async () => {
       const owner = await signupUser(ctx);
       const h = await createHousehold(ctx, owner.cookie);
       const id = await createActiveBill(h, owner.cookie);
@@ -306,6 +360,8 @@ describe("bill definitions", () => {
       expect(res.status).toBe(200);
       const [row] = await ctx.db.select().from(bills).where(eq(bills.id, id));
       expect(row!.status).toBe("PAUSED");
+      const [log] = await ctx.db.select().from(auditLogs).where(and(eq(auditLogs.householdId, h.id), eq(auditLogs.action, "bill.paused")));
+      expect(log).toMatchObject({ entityId: id, oldValue: { status: "ACTIVE" }, newValue: { status: "PAUSED" } });
     });
 
     it("rejects pausing an already-paused bill", async () => {
@@ -326,7 +382,7 @@ describe("bill definitions", () => {
       expect(res.status).toBe(409);
     });
 
-    it("resumes a paused bill", async () => {
+    it("resumes a paused bill and records an audit log entry", async () => {
       const owner = await signupUser(ctx);
       const h = await createHousehold(ctx, owner.cookie);
       const id = await createActiveBill(h, owner.cookie);
@@ -335,6 +391,8 @@ describe("bill definitions", () => {
       expect(res.status).toBe(200);
       const [row] = await ctx.db.select().from(bills).where(eq(bills.id, id));
       expect(row!.status).toBe("ACTIVE");
+      const [log] = await ctx.db.select().from(auditLogs).where(and(eq(auditLogs.householdId, h.id), eq(auditLogs.action, "bill.resumed")));
+      expect(log).toMatchObject({ entityId: id, oldValue: { status: "PAUSED" }, newValue: { status: "ACTIVE" } });
     });
 
     it("rejects resuming an active bill", async () => {
@@ -354,7 +412,7 @@ describe("bill definitions", () => {
       expect(res.status).toBe(409);
     });
 
-    it("archives an active bill, setting archivedAt", async () => {
+    it("archives an active bill, setting archivedAt, and records an audit log entry", async () => {
       const owner = await signupUser(ctx);
       const h = await createHousehold(ctx, owner.cookie);
       const id = await createActiveBill(h, owner.cookie);
@@ -363,6 +421,8 @@ describe("bill definitions", () => {
       const [row] = await ctx.db.select().from(bills).where(eq(bills.id, id));
       expect(row!.status).toBe("ARCHIVED");
       expect(row!.archivedAt).not.toBeNull();
+      const [log] = await ctx.db.select().from(auditLogs).where(and(eq(auditLogs.householdId, h.id), eq(auditLogs.action, "bill.archived")));
+      expect(log).toMatchObject({ entityId: id, oldValue: { status: "ACTIVE" } });
     });
 
     it("archives a paused bill", async () => {
@@ -383,7 +443,7 @@ describe("bill definitions", () => {
       expect(res.status).toBe(409);
     });
 
-    it("unarchives a bill back to ACTIVE, clearing archivedAt", async () => {
+    it("unarchives a bill back to ACTIVE, clearing archivedAt, and records an audit log entry", async () => {
       const owner = await signupUser(ctx);
       const h = await createHousehold(ctx, owner.cookie);
       const id = await createActiveBill(h, owner.cookie);
@@ -393,6 +453,8 @@ describe("bill definitions", () => {
       const [row] = await ctx.db.select().from(bills).where(eq(bills.id, id));
       expect(row!.status).toBe("ACTIVE");
       expect(row!.archivedAt).toBeNull();
+      const [log] = await ctx.db.select().from(auditLogs).where(and(eq(auditLogs.householdId, h.id), eq(auditLogs.action, "bill.unarchived")));
+      expect(log).toMatchObject({ entityId: id, oldValue: { status: "ARCHIVED" } });
     });
 
     it("rejects unarchiving an active bill", async () => {

@@ -25,12 +25,18 @@ async function requireCategoryInHousehold(db: DbOrTx, householdId: string, categ
   if (!row) throw Errors.validation({ categoryId: "That category doesn't exist." });
 }
 
-export type ListBillsFilters = { status?: BillStatus };
+export type ListBillsFilters = { status?: BillStatus; includeArchived?: boolean };
 
-/** With no status filter, archived bills are hidden by default — the UI's primary list is "bills I still manage". */
+/**
+ * With no `status` and no `includeArchived`, archived bills are hidden — the UI's primary list is
+ * "bills I still manage". `status` is an exact match (so `?status=ARCHIVED` already works without
+ * `includeArchived`); `includeArchived=true` is the escape hatch for "every status, in one request",
+ * matching the `?includeArchived=true` convention every other list endpoint in this codebase uses.
+ */
 export async function listBills(deps: Deps, membership: Membership, filters: ListBillsFilters = {}): Promise<BillDTO[]> {
   const conditions = [eq(bills.householdId, membership.householdId)];
-  conditions.push(filters.status ? eq(bills.status, filters.status) : ne(bills.status, "ARCHIVED"));
+  if (filters.status) conditions.push(eq(bills.status, filters.status));
+  else if (!filters.includeArchived) conditions.push(ne(bills.status, "ARCHIVED"));
   const rows = await deps.db.select().from(bills).where(and(...conditions)).orderBy(asc(bills.name));
   return rows.map(toBillDTO);
 }
@@ -88,10 +94,14 @@ export async function updateBill(deps: Deps, actorUserId: string, membership: Me
     if (patch.notes !== undefined) changes.notes = patch.notes;
     // Changing frequency replaces the entire interval config block — a stale intervalUnit from a
     // past CUSTOM config must not survive a switch away from CUSTOM (same reasoning as checklist tasks).
+    // intervalCount only resets to the canonical 1 on a GENUINE frequency change with no count given —
+    // resending the bill's current frequency (e.g. a CUSTOM bill patched with only a new intervalUnit)
+    // must not silently blow away an existing intervalCount the request never mentioned.
     if (patch.frequency !== undefined) {
       changes.frequency = patch.frequency;
       changes.intervalUnit = patch.intervalUnit ?? null;
-      changes.intervalCount = patch.intervalCount ?? 1;
+      if (patch.intervalCount !== undefined) changes.intervalCount = patch.intervalCount;
+      else if (patch.frequency !== before.frequency) changes.intervalCount = 1;
     }
     if (Object.keys(changes).length > 0) await tx.update(bills).set(changes).where(eq(bills.id, billId));
     await recordAudit(tx, { householdId: membership.householdId, actorUserId, action: "bill.updated", entityType: "bill", entityId: billId, oldValue: before, newValue: changes, ipAddress: ip ?? null });
