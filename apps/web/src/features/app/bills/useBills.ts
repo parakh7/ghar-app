@@ -1,4 +1,3 @@
-import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { BillCategoryDTO, BillDTO, BillOccurrenceDTO, CreateBillCategoryInput, CreateBillInput, MoveCategoryInput, UpdateBillCategoryInput, UpdateBillInput, UpdateOccurrenceAmountInput } from "@household/shared";
 import { del, get, patch, post } from "../../../lib/api";
@@ -116,28 +115,31 @@ export function useUnarchiveBill(householdId: string) {
 }
 
 /**
- * Lists a bill's occurrences, kicking off a background `/sync` on mount first — the endpoint is
- * idempotent and `bills.view`-gated specifically so it's safe to fire on every page load with no
- * permission check. Writes the synced list straight into the query cache on success (rather than
- * just invalidating) so the page renders fresh data as soon as it lands instead of waiting on a
- * second round trip; sync failing is swallowed because the plain GET query below still renders
- * whatever occurrences already exist, so a failed background refresh shouldn't block the page.
+ * Lists a bill's occurrences, syncing first — the endpoint is idempotent and `bills.view`-gated
+ * specifically so it's safe to call on every page load with no permission check.
+ *
+ * The sync call and the read live in ONE sequential `queryFn`, not a separate `useEffect` firing a
+ * sync alongside `useQuery`'s own independent GET: two concurrent HTTP round trips have no ordering
+ * guarantee, so if the GET resolved after a sync-triggered cache write landed, the GET's response
+ * would silently overwrite the cache with pre-sync (stale) data. Sequencing them in one `queryFn`
+ * means the GET (when it runs at all) only ever happens after the sync it's reporting on.
+ *
+ * The sync response already IS the refreshed list (the route handler returns `listOccurrences`
+ * right after `ensureOccurrences`), so the common path returns it directly with no second request.
+ * The GET only runs as a fallback for when sync itself fails (offline, timeout, etc.) — best-effort,
+ * so a failed background refresh still shows whatever already exists rather than blocking the page.
  */
 export function useOccurrences(householdId: string | undefined, billId: string | undefined) {
-  const qc = useQueryClient();
-
-  useEffect(() => {
-    if (!householdId || !billId) return;
-    post<BillOccurrenceDTO[]>(`/households/${householdId}/bills/${billId}/occurrences/sync`)
-      .then((r) => qc.setQueryData(["bill-occurrences", householdId, billId], r.data))
-      .catch(() => {
-        // Best-effort: the GET query below still has whatever was already cached/fetched.
-      });
-  }, [householdId, billId, qc]);
-
   return useQuery({
     queryKey: ["bill-occurrences", householdId, billId],
-    queryFn: ({ signal }) => get<BillOccurrenceDTO[]>(`/households/${householdId}/bills/${billId}/occurrences`, signal).then((r) => r.data),
+    queryFn: async ({ signal }) => {
+      try {
+        const synced = await post<BillOccurrenceDTO[]>(`/households/${householdId}/bills/${billId}/occurrences/sync`);
+        return synced.data;
+      } catch {
+        return get<BillOccurrenceDTO[]>(`/households/${householdId}/bills/${billId}/occurrences`, signal).then((r) => r.data);
+      }
+    },
     enabled: !!householdId && !!billId,
   });
 }

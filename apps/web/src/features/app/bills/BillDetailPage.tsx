@@ -98,7 +98,9 @@ export function BillDetailPage() {
       </div>
 
       <h2 className="section-title">Occurrences</h2>
-      {(occurrencesQuery.data ?? []).length === 0 ? (
+      {occurrencesQuery.isPending ? (
+        <p className="list__meta" style={{ padding: "0 var(--space-1)" }}>Loading…</p>
+      ) : (occurrencesQuery.data ?? []).length === 0 ? (
         <p className="list__meta" style={{ padding: "0 var(--space-1)" }}>No occurrences yet.</p>
       ) : (
         <div className="list" style={{ marginBottom: "var(--space-6)" }}>
