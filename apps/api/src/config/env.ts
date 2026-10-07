@@ -9,6 +9,7 @@ const envSchema = z.object({
   CORS_ORIGINS: z.string().default(""),
   TRUST_PROXY: z.coerce.number().int().min(0).default(0),
   DATABASE_URL: z.string().url(),
+  REDIS_URL: z.string().url().default("redis://localhost:6379"),
   SESSION_TTL_DAYS: z.coerce.number().int().min(1).max(365).default(30),
   EMAIL_PROVIDER: z.enum(["console", "memory"]).default("console"),
   EMAIL_FROM: z.string().default("Household <no-reply@example.com>"),

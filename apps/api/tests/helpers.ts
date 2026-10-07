@@ -5,6 +5,7 @@ import { createApp } from "../src/app.js";
 import { loadEnv, type Env } from "../src/config/env.js";
 import { createDb, createPool, type Database } from "../src/db/client.js";
 import { createLogger } from "../src/lib/logger.js";
+import { FakeQueue } from "../src/lib/queue.js";
 import { MemoryEmailProvider } from "../src/services/email/email.provider.js";
 import type { Deps } from "../src/services/deps.js";
 
@@ -24,6 +25,7 @@ export type TestContext = {
   db: Database;
   email: MemoryEmailProvider;
   clock: FakeClock;
+  queue: FakeQueue;
   request: ReturnType<typeof supertest>;
   close: () => Promise<void>;
 };
@@ -34,9 +36,10 @@ export function createTestContext(envOverrides: Partial<Record<keyof Env, string
   const db = createDb(pool);
   const email = new MemoryEmailProvider();
   const clock = new FakeClock();
-  const deps: Deps = { env, db, logger: createLogger(env), clock, email };
+  const queue = new FakeQueue();
+  const deps: Deps = { env, db, logger: createLogger(env), clock, email, queue };
   const app = createApp(deps);
-  return { deps, db, email, clock, request: supertest(app), close: () => pool.end() };
+  return { deps, db, email, clock, queue, request: supertest(app), close: () => pool.end() };
 }
 
 export async function truncateAll(db: Database) {

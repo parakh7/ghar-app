@@ -9,6 +9,7 @@ import { loadEnv } from "../config/env.js";
 import { systemClock } from "../lib/clock.js";
 import { createLogger } from "../lib/logger.js";
 import { hashPassword } from "../lib/password.js";
+import { FakeQueue } from "../lib/queue.js";
 import { ConsoleEmailProvider } from "../services/email/email.provider.js";
 import { createHousehold } from "../services/household.service.js";
 import { createDb, createPool } from "./client.js";
@@ -22,7 +23,8 @@ async function main() {
   const logger = createLogger(env);
   const pool = createPool(env.DATABASE_URL);
   const db = createDb(pool);
-  const deps = { env, db, logger, clock: systemClock, email: new ConsoleEmailProvider(logger) };
+  // Seeding never touches the job queue, so a FakeQueue satisfies Deps without needing Redis.
+  const deps = { env, db, logger, clock: systemClock, email: new ConsoleEmailProvider(logger), queue: new FakeQueue() };
 
   const existing = await db.select({ id: users.id }).from(users).where(eq(users.email, "parakh@example.com")).limit(1);
   if (existing.length) {
