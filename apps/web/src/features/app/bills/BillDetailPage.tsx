@@ -1,14 +1,18 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { formatINR } from "@household/shared";
+import { formatINR, MoneyError, rupeesToPaise, updateOccurrenceAmountSchema } from "@household/shared";
 import { ApiError } from "../../../lib/api";
 import { Alert } from "../../../components/Alert";
 import { Button } from "../../../components/Button";
+import { TextField } from "../../../components/TextField";
 import { useActiveHousehold } from "../useActiveHousehold";
 import { useHousehold } from "../members/useMembers";
 import { formatBillFrequency } from "./billFrequency";
 import { STATUS_LABEL, toneOf } from "./statusTone";
-import { useArchiveBill, useBill, useBillCategories, usePauseBill, useResumeBill, useUnarchiveBill } from "./useBills";
+import { STATUS_LABEL as OCCURRENCE_STATUS_LABEL, toneOf as occurrenceToneOf } from "./occurrenceStatusTone";
+import { useArchiveBill, useBill, useBillCategories, useOccurrences, usePauseBill, useResumeBill, useUnarchiveBill, useUpdateOccurrenceAmount } from "./useBills";
+
+const AMOUNT_HINT = "Enter a valid rupee amount, e.g. 1500 or 1,500.50";
 
 function messageFrom(err: unknown): string {
   return err instanceof ApiError ? err.message : "Something went wrong. Please try again.";
@@ -29,9 +33,41 @@ export function BillDetailPage() {
   const canManage = householdQuery.data?.permissions.includes("bills.manage") ?? false;
   const [pageError, setPageError] = useState<string | null>(null);
 
+  const occurrencesQuery = useOccurrences(householdId, id);
+  const updateAmount = useUpdateOccurrenceAmount(householdId ?? "", id ?? "");
+  const [editingOccurrenceId, setEditingOccurrenceId] = useState<string | null>(null);
+  const [amountInput, setAmountInput] = useState("");
+  const [amountError, setAmountError] = useState<string | undefined>(undefined);
+
   function onArchive() {
     if (!window.confirm(`Archive ${billQuery.data?.name}? It'll drop off the main list, but its history stays.`)) return;
     archive.mutate(id!, { onError: (err) => setPageError(messageFrom(err)) });
+  }
+
+  function startEditAmount(occurrenceId: string, currentAmountDuePaise: number) {
+    setEditingOccurrenceId(occurrenceId);
+    setAmountInput((currentAmountDuePaise / 100).toFixed(2));
+    setAmountError(undefined);
+  }
+
+  function onSaveAmount(occurrenceId: string) {
+    setAmountError(undefined);
+    let amountDuePaise: number;
+    try {
+      amountDuePaise = rupeesToPaise(amountInput);
+    } catch (err) {
+      if (err instanceof MoneyError) return setAmountError(AMOUNT_HINT);
+      throw err;
+    }
+    const parsed = updateOccurrenceAmountSchema.safeParse({ amountDuePaise });
+    if (!parsed.success) return setAmountError(parsed.error.issues[0]?.message ?? "Invalid amount.");
+    updateAmount.mutate(
+      { occurrenceId, body: parsed.data },
+      {
+        onSuccess: () => setEditingOccurrenceId(null),
+        onError: (err) => setAmountError(messageFrom(err)),
+      },
+    );
   }
 
   if (!householdId || !billQuery.data) return null;
@@ -60,6 +96,43 @@ export function BillDetailPage() {
         <div className="list__item"><span className="list__text"><span className="list__label" style={{ display: "block" }}>Autopay</span><span className="list__meta">{b.autopay ? "On" : "Off"}</span></span></div>
         {b.notes && <div className="list__item"><span className="list__text"><span className="list__label" style={{ display: "block" }}>Notes</span><span className="list__meta">{b.notes}</span></span></div>}
       </div>
+
+      <h2 className="section-title">Occurrences</h2>
+      {(occurrencesQuery.data ?? []).length === 0 ? (
+        <p className="list__meta" style={{ padding: "0 var(--space-1)" }}>No occurrences yet.</p>
+      ) : (
+        <div className="list" style={{ marginBottom: "var(--space-6)" }}>
+          {(occurrencesQuery.data ?? []).map((occ) => (
+            <div key={occ.id} className="list__item" style={{ display: "block" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span className="list__text">
+                  <span className="list__label" style={{ display: "block" }}>{occ.dueDate}</span>
+                  <span className="list__meta">{formatINR(occ.amountDuePaise)}</span>
+                </span>
+                <span className={`badge badge--${occurrenceToneOf(occ.status)}`}>{OCCURRENCE_STATUS_LABEL[occ.status]}</span>
+              </div>
+              {canManage && b.amountPaise === null && occ.status === "PENDING" && (
+                editingOccurrenceId === occ.id ? (
+                  <div style={{ marginTop: "var(--space-2)", display: "grid", gap: "var(--space-2)" }}>
+                    <TextField
+                      label="Amount due (₹)" inputMode="decimal" value={amountInput}
+                      onChange={(e) => setAmountInput(e.target.value)} error={amountError}
+                    />
+                    <div style={{ display: "flex", gap: "var(--space-2)" }}>
+                      <Button loading={updateAmount.isPending} onClick={() => onSaveAmount(occ.id)}>Save</Button>
+                      <Button variant="ghost" onClick={() => setEditingOccurrenceId(null)}>Cancel</Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ marginTop: "var(--space-2)" }}>
+                    <Button variant="ghost" onClick={() => startEditAmount(occ.id, occ.amountDuePaise)}>Set amount</Button>
+                  </div>
+                )
+              )}
+            </div>
+          ))}
+        </div>
+      )}
 
       {canManage && (
         <div style={{ marginTop: "var(--space-6)", display: "grid", gap: "var(--space-3)" }}>
