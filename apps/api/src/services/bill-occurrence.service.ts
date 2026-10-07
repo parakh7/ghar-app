@@ -1,6 +1,6 @@
 import { and, asc, eq, gte, inArray, lte } from "drizzle-orm";
 import type { BillOccurrenceDTO, BillFrequency, BillStatus, OccurrenceStatus, UpdateOccurrenceAmountInput } from "@household/shared";
-import { dateInZone, occurrenceDueDate } from "@household/shared";
+import { dateInZone, daysBetween, occurrenceDueDate, parseDateParts } from "@household/shared";
 import { bills, billOccurrences } from "../db/schema.js";
 import type { DbOrTx } from "../db/client.js";
 import { Errors } from "../lib/errors.js";
@@ -82,6 +82,71 @@ function isUnlocked(row: OccurrenceRow, today: string): boolean {
 }
 
 /**
+ * The fixed day-count step between consecutive occurrences for a day-based frequency (WEEKLY,
+ * CUSTOM day/week), or `null` for anything else (month-based, or ONE_TIME which never calls this).
+ */
+function dayStepOf(bill: EnsureOccurrencesBillFields): number | null {
+  if (bill.frequency === "WEEKLY") return 7;
+  if (bill.frequency === "CUSTOM") {
+    if (bill.intervalUnit === "day") return bill.intervalCount;
+    if (bill.intervalUnit === "week") return bill.intervalCount * 7;
+  }
+  return null;
+}
+
+/**
+ * The fixed calendar-month step between consecutive occurrences for a month-based frequency
+ * (MONTHLY/QUARTERLY/HALF_YEARLY/YEARLY, CUSTOM month), or `null` for anything else.
+ */
+function monthStepOf(bill: EnsureOccurrencesBillFields): number | null {
+  switch (bill.frequency) {
+    case "MONTHLY": return 1;
+    case "QUARTERLY": return 3;
+    case "HALF_YEARLY": return 6;
+    case "YEARLY": return 12;
+    case "CUSTOM": return bill.intervalUnit === "month" ? bill.intervalCount : null;
+    default: return null;
+  }
+}
+
+/**
+ * The smallest `sequence` the `ruleDatesWithin` loop needs to START at to still produce every date
+ * `>= floor`, computed directly instead of counting up from 0 (see `ruleDatesWithin`'s doc comment
+ * for why iterating from 0 is the actual perf bug this exists to fix).
+ *
+ * Day-based steps (WEEKLY, CUSTOM day/week) are exact: `occurrenceDueDate` for these is pure
+ * `firstDueDate + sequence * step` with no clamping, so `ceil((floor - firstDueDate) / step)` is
+ * precisely the first sequence whose date is `>= floor`.
+ *
+ * Month-based steps (MONTHLY/QUARTERLY/HALF_YEARLY/YEARLY, CUSTOM month) are only approximate,
+ * deliberately biased EARLY: `addMonthsClamped` can only ever pull a date's day-of-month DOWN to fit
+ * a shorter month (e.g. day 31 -> day 28/29/30), never push it later — so the real date for a given
+ * sequence is always `<=` the naive "same day-of-month" estimate used here. That means this estimate
+ * can only under-shoot the true starting sequence (start a few sequences too early), never over-shoot
+ * it (which could skip a date that should have been included). The extra `- 1` below is a small
+ * margin for that under-shoot (bounded by the clamp, at most a handful of days — far less than one
+ * whole step), not a precision requirement: `ruleDatesWithin`'s own `dueDate >= floor` check trims
+ * any resulting handful of extra iterations below the floor, so the exact margin only has to be "a
+ * small constant", not exact.
+ */
+function startSequenceFor(bill: EnsureOccurrencesBillFields, floor: string): number {
+  const dayStep = dayStepOf(bill);
+  if (dayStep !== null) {
+    const diffDays = daysBetween(bill.firstDueDate, floor);
+    return diffDays <= 0 ? 0 : Math.ceil(diffDays / dayStep);
+  }
+  const monthStep = monthStepOf(bill);
+  if (monthStep !== null) {
+    const first = parseDateParts(bill.firstDueDate);
+    const target = parseDateParts(floor);
+    const diffMonths = (target.year * 12 + (target.month - 1)) - (first.year * 12 + (first.month - 1));
+    if (diffMonths <= 0) return 0;
+    return Math.max(0, Math.floor(diffMonths / monthStep) - 1);
+  }
+  return 0; // Unreachable for a valid bill (ONE_TIME never calls this; every other case is covered above).
+}
+
+/**
  * The due dates the bill's current rule produces, bounded to `[floor, horizon]` (both inclusive).
  * `floor: null` means unbounded below.
  *
@@ -89,13 +154,22 @@ function isUnlocked(row: OccurrenceRow, today: string): boolean {
  * possible occurrence (`firstDueDate` itself), so there is no "worst-case backfill size" for the
  * floor to bound — applying it here would mean a `ONE_TIME` bill whose `firstDueDate` is more than
  * floor-many months in the past silently generates zero occurrences, forever, with no recovery path.
+ *
+ * Starts counting from `startSequenceFor(bill, floor)` rather than sequence 0: the loop's own
+ * termination (`dueDate > horizon`) never depended on `floor` — only which computed dates got KEPT
+ * did — so a bill with a very old `firstDueDate` used to pay for every sequence between it and the
+ * horizon on every single call, including the callers (every resync) that immediately filter
+ * everything before `floor` back out again. Starting at (or just before) the true first in-range
+ * sequence makes the output identical while the iteration count stays bounded by the actual date
+ * range of interest instead of the bill's full history.
  */
 function ruleDatesWithin(bill: EnsureOccurrencesBillFields, floor: string | null, horizon: string): string[] {
   if (bill.frequency === "ONE_TIME") {
     return bill.firstDueDate <= horizon ? [bill.firstDueDate] : [];
   }
   const dates: string[] = [];
-  for (let sequence = 0; ; sequence++) {
+  const start = floor === null ? 0 : startSequenceFor(bill, floor);
+  for (let sequence = start; ; sequence++) {
     const dueDate = occurrenceDueDate(bill, sequence);
     if (dueDate > horizon) break;
     if (floor === null || dueDate >= floor) dates.push(dueDate);
@@ -142,7 +216,14 @@ export async function ensureOccurrences(
     // rows — ONE_TIME is exempt from that floor, see `ruleDatesWithin`). Every other resync only
     // ever looks forward — a frequency correction (or a passive `/sync` call) shouldn't suddenly
     // manufacture a flood of newly-overdue bills.
-    let neededDates = isInitialGeneration ? ruleDatesWithin(bill, oneYearAgo(today), horizon) : ruleDatesWithin(bill, null, horizon);
+    //
+    // The resync branch passes `today` (not `null`) as the floor: the very next line already
+    // discards everything `<= today` regardless, so `today` is behavior-identical to `null` here —
+    // but passing a concrete floor is what lets `ruleDatesWithin` start counting near today instead
+    // of at sequence 0. This is the path `/sync` hits on every bill-detail page view (any VIEWER,
+    // no special permission), so a very old `firstDueDate` must not make THIS branch pay for its
+    // entire history on every call — see `ruleDatesWithin`/`startSequenceFor`'s doc comments.
+    let neededDates = isInitialGeneration ? ruleDatesWithin(bill, oneYearAgo(today), horizon) : ruleDatesWithin(bill, today, horizon);
     if (!isInitialGeneration) neededDates = neededDates.filter((d) => d > today);
     const neededSet = new Set(neededDates);
 

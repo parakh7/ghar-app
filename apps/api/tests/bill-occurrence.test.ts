@@ -181,6 +181,54 @@ describe("bill occurrence generation and sync", () => {
     });
   });
 
+  describe("very old firstDueDate — starting-sequence bound stays correct and fast", () => {
+    // About 11 years before TODAY (2026-09-29) — well past the 12-month backfill floor
+    // (`oneYearAgo(TODAY)`). This is exactly the shape of input `startSequenceFor` exists for: before
+    // the fix, `ruleDatesWithin`'s loop termination (`dueDate > horizon`) never depended on the
+    // floor, so a bill this old paid for iterating its ENTIRE history up to the horizon on every
+    // single call — including every passive `/sync`, reachable by any VIEWER on every bill-detail
+    // page view.
+    const OLD_FIRST_DUE = "2015-01-01";
+    // Mirrors the service's own `oneYearAgo(today)` — the floor initial generation actually applies.
+    const FLOOR = occurrenceDueDate({ frequency: "CUSTOM", intervalCount: 12, intervalUnit: "month", firstDueDate: TODAY }, -1);
+
+    it("MONTHLY generates exactly the floor-bounded occurrence set, well within a fast-path time budget", async () => {
+      const owner = await signupUser(ctx);
+      const h = await createHousehold(ctx, owner.cookie);
+
+      const startedAt = Date.now();
+      const bill = await createBill(h, owner.cookie, { name: "Old monthly bill", frequency: "MONTHLY", firstDueDate: OLD_FIRST_DUE });
+      const occurrences = await listOccurrences(h, bill.id, owner.cookie);
+      const elapsedMs = Date.now() - startedAt;
+
+      const expected = expectedDueDates({ frequency: "MONTHLY", intervalCount: 1, intervalUnit: null, firstDueDate: OLD_FIRST_DUE }, HORIZON)
+        .filter((d) => d >= FLOOR);
+      expect(occurrences.map((o) => o.dueDate)).toEqual(expected);
+      // Loose, non-flaky structural bound (generous enough to never flake in CI) — mainly guards
+      // against a regression back to unbounded day-granularity iteration, not a tight perf assertion.
+      expect(elapsedMs).toBeLessThan(2000);
+    });
+
+    it("CUSTOM day/1 (the reported pathological shape) generates exactly the floor-bounded occurrence set, well within a fast-path time budget", async () => {
+      const owner = await signupUser(ctx);
+      const h = await createHousehold(ctx, owner.cookie);
+
+      const startedAt = Date.now();
+      const bill = await createBill(h, owner.cookie, { name: "Old daily bill", frequency: "CUSTOM", intervalCount: 1, intervalUnit: "day", firstDueDate: OLD_FIRST_DUE });
+      const occurrences = await listOccurrences(h, bill.id, owner.cookie);
+      const elapsedMs = Date.now() - startedAt;
+
+      const expected = expectedDueDates({ frequency: "CUSTOM", intervalCount: 1, intervalUnit: "day", firstDueDate: OLD_FIRST_DUE }, HORIZON)
+        .filter((d) => d >= FLOOR);
+      expect(occurrences.map((o) => o.dueDate)).toEqual(expected);
+      // Before the fix, this shape (CUSTOM/day/1 with an old `firstDueDate`) is what the reviewer's
+      // repro was built from (day-granularity iteration from sequence 0 all the way to the horizon,
+      // paid on every call). A generous ceiling well under that failure mode, chosen to avoid CI
+      // flakiness while still catching a regression back to unbounded iteration.
+      expect(elapsedMs).toBeLessThan(2000);
+    });
+  });
+
   describe("resuming/unarchiving resyncs a schedule that changed while inactive", () => {
     it("resuming a paused bill resyncs occurrences to whatever schedule was set while paused", async () => {
       const owner = await signupUser(ctx);

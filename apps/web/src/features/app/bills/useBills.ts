@@ -62,7 +62,15 @@ export function useBill(householdId: string | undefined, id: string | undefined)
 function invalidateBillQueries(qc: ReturnType<typeof useQueryClient>, householdId: string, id?: string) {
   return Promise.all([
     qc.invalidateQueries({ queryKey: ["bills", householdId] }),
-    ...(id ? [qc.invalidateQueries({ queryKey: ["bill", householdId, id] })] : []),
+    ...(id
+      ? [
+          qc.invalidateQueries({ queryKey: ["bill", householdId, id] }),
+          // Mutations like resume/unarchive call `ensureOccurrences` server-side, which can change
+          // the occurrence schedule without the bill detail page remounting — invalidate this too
+          // so `useOccurrences` resyncs instead of showing a stale list until a manual refresh.
+          qc.invalidateQueries({ queryKey: ["bill-occurrences", householdId, id] }),
+        ]
+      : []),
   ]);
 }
 
