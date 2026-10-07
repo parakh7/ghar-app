@@ -1,4 +1,4 @@
-import { and, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import type { BillPaymentDTO, OccurrenceStatus, Permission, RecordBillPaymentInput } from "@household/shared";
 import { sumPaise } from "@household/shared";
 import { billOccurrences, billPayments } from "../db/schema.js";
@@ -148,4 +148,28 @@ export async function voidPayment(
     if (!occurrence) throw Errors.notFound("Occurrence"); // defensive: FK guarantees this exists
     await recomputeOccurrencePaymentTotals(deps, tx, actorUserId, membership, occurrence, ip);
   });
+}
+
+/**
+ * Lists every payment recorded against one occurrence — BOTH non-voided and voided — oldest
+ * `paidOn` first, same ordering convention `getSettlement`'s embedded payment list already uses.
+ * Voided rows are deliberately included: `amountPaidPaise`/`status` already reflect the active
+ * total, but nothing else exposes a full payment history (a `paymentId` is only ever known from the
+ * `POST` response that created it, useless once the page reloads) — this is meant to support a full
+ * history/audit view, so the caller decides how to render a voided entry, not this layer.
+ *
+ * Scoped by `(householdId, billId, occurrenceId)` — same `billId`-matches-`:id` check
+ * `recordPayment`/`updateOccurrenceAmount` already do, for the same reason.
+ */
+export async function listOccurrencePayments(
+  deps: Deps, membership: Membership, billId: string, occurrenceId: string,
+): Promise<BillPaymentDTO[]> {
+  const [occurrence] = await deps.db.select({ id: billOccurrences.id, billId: billOccurrences.billId }).from(billOccurrences)
+    .where(and(eq(billOccurrences.householdId, membership.householdId), eq(billOccurrences.id, occurrenceId)));
+  if (!occurrence || occurrence.billId !== billId) throw Errors.notFound("Occurrence");
+
+  const rows = await deps.db.select().from(billPayments)
+    .where(and(eq(billPayments.householdId, membership.householdId), eq(billPayments.occurrenceId, occurrenceId)))
+    .orderBy(asc(billPayments.paidOn));
+  return rows.map(toPaymentDTO);
 }

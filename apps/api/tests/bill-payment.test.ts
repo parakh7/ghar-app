@@ -48,6 +48,10 @@ function waive(c: TestContext, cookie: string, householdId: string, billId: stri
   return c.request.post(`/api/households/${householdId}/bills/${billId}/occurrences/${occurrenceId}/waive`).set(csrf).set("cookie", cookie).send(body);
 }
 
+function listPayments(c: TestContext, cookie: string, householdId: string, billId: string, occurrenceId: string) {
+  return c.request.get(`/api/households/${householdId}/bills/${billId}/occurrences/${occurrenceId}/payments`).set("cookie", cookie);
+}
+
 describe("bill payments", () => {
   it("a partial payment moves the occurrence to PARTIALLY_PAID", async () => {
     const owner = await signupUser(ctx);
@@ -181,6 +185,57 @@ describe("bill payments", () => {
     expect(res.status).toBe(400);
   });
 
+  describe("listOccurrencePayments", () => {
+    it("returns both active and voided payments for an occurrence", async () => {
+      const owner = await signupUser(ctx);
+      const h = await createHousehold(ctx, owner.cookie);
+      const bill = await createBill(h, owner.cookie, { name: "Electricity", frequency: "MONTHLY", firstDueDate: "2026-11-05", amountPaise: 100000 });
+      const occ = await firstOccurrence(h, bill.id, owner.cookie);
+
+      const first = await recordPayment(ctx, owner.cookie, h.id, bill.id, occ.id, { amountPaise: 20000, paidOn: "2026-11-01", method: "CASH" });
+      expect(first.status).toBe(201);
+      const second = await recordPayment(ctx, owner.cookie, h.id, bill.id, occ.id, { amountPaise: 20000, paidOn: "2026-11-02", method: "UPI" });
+      expect(second.status).toBe(201);
+      const third = await recordPayment(ctx, owner.cookie, h.id, bill.id, occ.id, { amountPaise: 20000, paidOn: "2026-11-03", method: "CARD" });
+      expect(third.status).toBe(201);
+      const voidRes = await voidPayment(ctx, owner.cookie, h.id, bill.id, occ.id, third.body.data.id, "entered in error");
+      expect(voidRes.status).toBe(200);
+
+      const res = await listPayments(ctx, owner.cookie, h.id, bill.id, occ.id);
+      expect(res.status).toBe(200);
+      const payments = res.body.data as Array<{ id: string; voidedAt: string | null }>;
+      expect(payments).toHaveLength(3);
+      expect(payments.map((p) => p.id).sort()).toEqual([first.body.data.id, second.body.data.id, third.body.data.id].sort());
+      const voided = payments.find((p) => p.id === third.body.data.id)!;
+      expect(voided.voidedAt).not.toBeNull();
+      payments.filter((p) => p.id !== third.body.data.id).forEach((p) => expect(p.voidedAt).toBeNull());
+    });
+
+    it("404s when the URL's bill id doesn't match the occurrence's actual bill", async () => {
+      const owner = await signupUser(ctx);
+      const h = await createHousehold(ctx, owner.cookie);
+      const billA = await createBill(h, owner.cookie, { name: "Bill A", frequency: "MONTHLY", firstDueDate: "2026-11-05", amountPaise: 100000 });
+      const billB = await createBill(h, owner.cookie, { name: "Bill B", frequency: "MONTHLY", firstDueDate: "2026-11-05", amountPaise: 100000 });
+      const occA = await firstOccurrence(h, billA.id, owner.cookie);
+
+      const res = await listPayments(ctx, owner.cookie, h.id, billB.id, occA.id);
+      expect(res.status).toBe(404);
+    });
+
+    it("404s listing payments for an occurrence scoped to another household", async () => {
+      const owner = await signupUser(ctx);
+      const h = await createHousehold(ctx, owner.cookie);
+      const bill = await createBill(h, owner.cookie, { name: "Electricity", frequency: "MONTHLY", firstDueDate: "2026-11-05", amountPaise: 100000 });
+      const occ = await firstOccurrence(h, bill.id, owner.cookie);
+
+      const other = await signupUser(ctx);
+      const hOther = await createHousehold(ctx, other.cookie, "Other household");
+
+      const res = await listPayments(ctx, other.cookie, hOther.id, bill.id, occ.id);
+      expect(res.status).toBe(404);
+    });
+  });
+
   describe("bill-id mismatch and cross-household isolation", () => {
     it("404s recording a payment when the URL's bill id doesn't match the occurrence's actual bill", async () => {
       const owner = await signupUser(ctx);
@@ -244,6 +299,23 @@ describe("bill payments", () => {
 
       const allowed = await recordPayment(ctx, member.cookie, h.id, bill.id, occ.id, { amountPaise: 1000, paidOn: "2026-11-01", method: "CASH" });
       expect(allowed.status).toBe(201);
+    });
+
+    it("VIEWER cannot void a payment (lacks payments.record)", async () => {
+      const owner = await signupUser(ctx);
+      const viewer = await signupUser(ctx);
+      const h = await createHousehold(ctx, owner.cookie);
+      await addMember(h.id, viewer.id, "VIEWER");
+      const bill = await createBill(h, owner.cookie, { name: "Electricity", frequency: "MONTHLY", firstDueDate: "2026-11-05", amountPaise: 100000 });
+      const occ = await firstOccurrence(h, bill.id, owner.cookie);
+      const payment = await recordPayment(ctx, owner.cookie, h.id, bill.id, occ.id, { amountPaise: 1000, paidOn: "2026-11-01", method: "CASH" });
+      expect(payment.status).toBe(201);
+
+      const denied = await voidPayment(ctx, viewer.cookie, h.id, bill.id, occ.id, payment.body.data.id);
+      expect(denied.status).toBe(403);
+
+      const [row] = await ctx.db.select().from(billPayments).where(eq(billPayments.id, payment.body.data.id));
+      expect(row!.voidedAt).toBeNull();
     });
   });
 });

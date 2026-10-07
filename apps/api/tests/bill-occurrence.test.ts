@@ -853,6 +853,25 @@ describe("bill occurrence generation and sync", () => {
       expect(res.status).toBe(404);
     });
 
+    it("404s unwaiving an occurrence scoped to another household", async () => {
+      const owner = await signupUser(ctx);
+      const h = await createHousehold(ctx, owner.cookie);
+      const bill = await createBill(h, owner.cookie, { name: "Test bill", frequency: "MONTHLY", firstDueDate: "2026-11-05" });
+      const [occurrence] = await listOccurrences(h, bill.id, owner.cookie);
+      const waiveRes = await waive(owner.cookie, h.id, bill.id, occurrence!.id);
+      expect(waiveRes.status).toBe(200);
+
+      const other = await signupUser(ctx);
+      const hOther = await createHousehold(ctx, other.cookie, "Other household");
+
+      const res = await unwaive(other.cookie, hOther.id, bill.id, occurrence!.id);
+      expect(res.status).toBe(404);
+
+      // The occurrence itself is untouched — still WAIVED, not reverted by the denied cross-household attempt.
+      const [row] = await ctx.db.select().from(billOccurrences).where(eq(billOccurrences.id, occurrence!.id));
+      expect(row!.status).toBe("WAIVED");
+    });
+
     it("VIEWER cannot waive/unwaive (needs bills.manage), but ADMIN can", async () => {
       const owner = await signupUser(ctx);
       const h = await createHousehold(ctx, owner.cookie);
@@ -875,6 +894,25 @@ describe("bill occurrence generation and sync", () => {
 
       const allowedUnwaive = await unwaive(admin.cookie, h.id, bill.id, occurrence!.id);
       expect(allowedUnwaive.status).toBe(200);
+    });
+
+    it("MEMBER cannot waive/unwaive — payments.record (granted by default) is not bills.manage", async () => {
+      const owner = await signupUser(ctx);
+      const member = await signupUser(ctx);
+      const h = await createHousehold(ctx, owner.cookie);
+      await addMember(h.id, member.id, "MEMBER");
+      const bill = await createBill(h, owner.cookie, { name: "Test bill", frequency: "MONTHLY", firstDueDate: "2026-11-05" });
+      const [occurrence] = await listOccurrences(h, bill.id, owner.cookie);
+
+      const deniedWaive = await waive(member.cookie, h.id, bill.id, occurrence!.id);
+      expect(deniedWaive.status).toBe(403);
+
+      // Owner waives it (bills.manage) so the MEMBER-unwaive attempt below has something to deny.
+      const waiveRes = await waive(owner.cookie, h.id, bill.id, occurrence!.id);
+      expect(waiveRes.status).toBe(200);
+
+      const deniedUnwaive = await unwaive(member.cookie, h.id, bill.id, occurrence!.id);
+      expect(deniedUnwaive.status).toBe(403);
     });
   });
 });

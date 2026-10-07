@@ -222,6 +222,10 @@ export function householdRoutes(deps: Deps): Router {
     ok(res, await billOccurrences.updateOccurrenceAmount(deps, req.auth!.user.id, req.membership!, req.params.id as string, req.params.occurrenceId as string, input, req.ip), 200, "Occurrence updated.");
   });
 
+  r.get("/:householdId/bills/:id/occurrences/:occurrenceId/payments", requireHousehold(deps, "bills.view"), async (req, res) => {
+    ok(res, await billPayments.listOccurrencePayments(deps, req.membership!, req.params.id as string, req.params.occurrenceId as string));
+  });
+
   r.post("/:householdId/bills/:id/occurrences/:occurrenceId/payments", requireHousehold(deps, "payments.record"), async (req, res) => {
     const input = parseBody(req, recordBillPaymentSchema);
     ok(res, await billPayments.recordPayment(deps, req.auth!.user.id, req.membership!, req.params.id as string, req.params.occurrenceId as string, input, req.ip), 201, "Payment recorded.");
