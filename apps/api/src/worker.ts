@@ -1,5 +1,6 @@
 import { loadEnv } from "./config/env.js";
 import { createDb, createPool } from "./db/client.js";
+import { runHeartbeat } from "./jobs/heartbeat.job.js";
 import { systemClock } from "./lib/clock.js";
 import { createLogger } from "./lib/logger.js";
 import { BullMQQueue } from "./lib/queue.js";
@@ -14,10 +15,13 @@ const email = env.EMAIL_PROVIDER === "memory" ? new MemoryEmailProvider() : new 
 const queue = new BullMQQueue(env, logger);
 
 // Constructing the Deps is already what starts job processing: the BullMQQueue's internal
-// Worker begins polling Redis as soon as it's created. Future tasks register handlers on
-// `deps.queue` and schedule repeating jobs — this process just needs to stay alive for that.
+// Worker begins polling Redis as soon as it's created. Register handlers and schedule
+// repeating jobs immediately after, to minimize (not eliminate) the window where a due
+// job could arrive before its handler is registered.
 const deps: Deps = { env, db, logger, clock: systemClock, email, queue };
-void deps;
+
+deps.queue.registerHandler("heartbeat", () => runHeartbeat(deps));
+await deps.queue.scheduleRepeating("heartbeat", {}, 60_000);
 
 logger.info({ env: env.NODE_ENV }, "worker listening for jobs");
 
