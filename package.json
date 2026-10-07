@@ -14,6 +14,7 @@
     "dev": "npm run dev --workspace @household/api & npm run dev --workspace @household/web",
     "dev:api": "npm run dev --workspace @household/api",
     "dev:web": "npm run dev --workspace @household/web",
+    "dev:worker": "npm run dev:worker --workspace @household/api",
     "build": "npm run build --workspace @household/shared && npm run build --workspace @household/api && npm run build --workspace @household/web",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "eslint .",
