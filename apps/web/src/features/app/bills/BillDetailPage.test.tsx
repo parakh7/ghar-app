@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -21,6 +21,13 @@ const PENDING_OCCURRENCE = {
   id: "occ1", billId: "b1", sequence: 1, dueDate: "2026-10-05",
   amountDuePaise: 150000, amountPaidPaise: 0, status: "PENDING" as const,
   paidAt: null, waivedAt: null, createdAt: "2026-01-01T00:00:00.000Z",
+};
+
+const WAIVED_OCCURRENCE = { ...PENDING_OCCURRENCE, status: "WAIVED" as const, waivedAt: "2026-10-01T00:00:00.000Z" };
+
+const ACTIVE_PAYMENT = {
+  id: "p1", occurrenceId: "occ1", amountPaise: 150000, paidOn: "2026-10-05", method: "CASH" as const,
+  transactionRef: null, notes: null, voidedAt: null, voidReason: null, createdAt: "2026-10-05T00:00:00.000Z",
 };
 
 function jsonResponse(body: unknown, status = 200) {
@@ -146,5 +153,122 @@ describe("BillDetailPage", () => {
     await screen.findByText("Electricity");
     await screen.findAllByText("2026-10-05");
     expect(screen.queryByRole("button", { name: "Set amount" })).not.toBeInTheDocument();
+  });
+
+  it("records a payment against a pending occurrence", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/households/h1")) return jsonResponse({ success: true, data: { ...HOUSEHOLD, permissions: ["bills.view", "payments.record"] }, message: null });
+      if (url.endsWith("/bill-categories")) return jsonResponse({ success: true, data: [], message: null });
+      if (url.endsWith("/bills/b1")) return jsonResponse({ success: true, data: ACTIVE_BILL, message: null });
+      if (init?.method === "POST" && url.endsWith("/bills/b1/occurrences/sync")) return jsonResponse({ success: true, data: [PENDING_OCCURRENCE], message: null });
+      if (init?.method === "GET" && url.endsWith("/occurrences/occ1/payments")) return jsonResponse({ success: true, data: [], message: null });
+      if (init?.method === "POST" && url.endsWith("/occurrences/occ1/payments")) {
+        return jsonResponse({ success: true, data: { ...ACTIVE_PAYMENT }, message: null }, 201);
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    }) as typeof fetch);
+    renderPage();
+    await screen.findByText("Electricity");
+    await userEvent.click(await screen.findByRole("button", { name: "Record payment" }));
+    await userEvent.type(screen.getByLabelText("Amount (₹)"), "1500");
+    fireEvent.change(screen.getByLabelText("Paid on"), { target: { value: "2026-10-05" } });
+    await userEvent.click(screen.getByRole("button", { name: "Record payment" }));
+    await waitFor(() => {
+      const postCall = fetchSpy.mock.calls.find(([u, i]) => String(u).endsWith("/occurrences/occ1/payments") && (i as RequestInit | undefined)?.method === "POST");
+      expect(postCall).toBeDefined();
+      const body = JSON.parse((postCall![1] as RequestInit).body as string);
+      expect(body).toEqual({ amountPaise: 150000, paidOn: "2026-10-05", method: "CASH" });
+    });
+  });
+
+  it("voids an active payment", async () => {
+    vi.spyOn(window, "prompt").mockReturnValue("");
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/households/h1")) return jsonResponse({ success: true, data: { ...HOUSEHOLD, permissions: ["bills.view", "payments.record"] }, message: null });
+      if (url.endsWith("/bill-categories")) return jsonResponse({ success: true, data: [], message: null });
+      if (url.endsWith("/bills/b1")) return jsonResponse({ success: true, data: ACTIVE_BILL, message: null });
+      if (init?.method === "POST" && url.endsWith("/bills/b1/occurrences/sync")) return jsonResponse({ success: true, data: [PENDING_OCCURRENCE], message: null });
+      if (init?.method === "GET" && url.endsWith("/occurrences/occ1/payments")) return jsonResponse({ success: true, data: [ACTIVE_PAYMENT], message: null });
+      if (init?.method === "DELETE" && url.endsWith("/occurrences/occ1/payments/p1")) return jsonResponse({ success: true, data: null, message: null });
+      throw new Error(`unexpected fetch ${url}`);
+    }) as typeof fetch);
+    renderPage();
+    await screen.findByText("Electricity");
+    await userEvent.click(await screen.findByRole("button", { name: "Void" }));
+    await waitFor(() => {
+      const delCall = fetchSpy.mock.calls.find(([u, i]) => String(u).endsWith("/occurrences/occ1/payments/p1") && (i as RequestInit | undefined)?.method === "DELETE");
+      expect(delCall).toBeDefined();
+    });
+  });
+
+  it("waives a pending occurrence", async () => {
+    vi.spyOn(window, "prompt").mockReturnValue("Tenant moved out");
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/households/h1")) return jsonResponse({ success: true, data: { ...HOUSEHOLD, permissions: ["bills.view", "bills.manage"] }, message: null });
+      if (url.endsWith("/bill-categories")) return jsonResponse({ success: true, data: [], message: null });
+      if (url.endsWith("/bills/b1")) return jsonResponse({ success: true, data: ACTIVE_BILL, message: null });
+      if (init?.method === "POST" && url.endsWith("/bills/b1/occurrences/sync")) return jsonResponse({ success: true, data: [PENDING_OCCURRENCE], message: null });
+      if (init?.method === "GET" && url.endsWith("/occurrences/occ1/payments")) return jsonResponse({ success: true, data: [], message: null });
+      if (init?.method === "POST" && url.endsWith("/occurrences/occ1/waive")) {
+        return jsonResponse({ success: true, data: { ...WAIVED_OCCURRENCE }, message: null });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    }) as typeof fetch);
+    renderPage();
+    await screen.findByText("Electricity");
+    await userEvent.click(await screen.findByRole("button", { name: "Waive" }));
+    await waitFor(() => {
+      const waiveCall = fetchSpy.mock.calls.find(([u, i]) => String(u).endsWith("/occurrences/occ1/waive") && (i as RequestInit | undefined)?.method === "POST");
+      expect(waiveCall).toBeDefined();
+      const body = JSON.parse((waiveCall![1] as RequestInit).body as string);
+      expect(body).toEqual({ reason: "Tenant moved out" });
+    });
+  });
+
+  it("unwaives a waived occurrence and hides the payment action while waived", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/households/h1")) return jsonResponse({ success: true, data: { ...HOUSEHOLD, permissions: ["bills.view", "bills.manage", "payments.record"] }, message: null });
+      if (url.endsWith("/bill-categories")) return jsonResponse({ success: true, data: [], message: null });
+      if (url.endsWith("/bills/b1")) return jsonResponse({ success: true, data: ACTIVE_BILL, message: null });
+      if (init?.method === "POST" && url.endsWith("/bills/b1/occurrences/sync")) return jsonResponse({ success: true, data: [WAIVED_OCCURRENCE], message: null });
+      if (init?.method === "GET" && url.endsWith("/occurrences/occ1/payments")) return jsonResponse({ success: true, data: [], message: null });
+      if (init?.method === "POST" && url.endsWith("/occurrences/occ1/unwaive")) {
+        return jsonResponse({ success: true, data: { ...PENDING_OCCURRENCE }, message: null });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    }) as typeof fetch);
+    renderPage();
+    await screen.findByText("Electricity");
+    expect(await screen.findByText("Waived")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Record payment" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Unwaive" }));
+    await waitFor(() => {
+      const unwaiveCall = fetchSpy.mock.calls.find(([u, i]) => String(u).endsWith("/occurrences/occ1/unwaive") && (i as RequestInit | undefined)?.method === "POST");
+      expect(unwaiveCall).toBeDefined();
+    });
+  });
+
+  it("hides payment-record, void and waive actions for a viewer without payments.record/bills.manage", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/households/h1")) return jsonResponse({ success: true, data: { ...HOUSEHOLD, permissions: ["bills.view"] }, message: null });
+      if (url.endsWith("/bill-categories")) return jsonResponse({ success: true, data: [], message: null });
+      if (url.endsWith("/bills/b1")) return jsonResponse({ success: true, data: ACTIVE_BILL, message: null });
+      if (init?.method === "POST" && url.endsWith("/bills/b1/occurrences/sync")) return jsonResponse({ success: true, data: [PENDING_OCCURRENCE], message: null });
+      if (init?.method === "GET" && url.endsWith("/occurrences/occ1/payments")) return jsonResponse({ success: true, data: [ACTIVE_PAYMENT], message: null });
+      throw new Error(`unexpected fetch ${url}`);
+    }) as typeof fetch);
+    renderPage();
+    await screen.findByText("Electricity");
+    await screen.findByText(/Cash/);
+    expect(screen.queryByRole("button", { name: "Record payment" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Void" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Waive" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Unwaive" })).not.toBeInTheDocument();
   });
 });

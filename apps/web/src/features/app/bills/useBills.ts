@@ -1,5 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { BillCategoryDTO, BillDTO, BillOccurrenceDTO, CreateBillCategoryInput, CreateBillInput, MoveCategoryInput, UpdateBillCategoryInput, UpdateBillInput, UpdateOccurrenceAmountInput } from "@household/shared";
+import type {
+  BillCategoryDTO, BillDTO, BillOccurrenceDTO, BillPaymentDTO, CreateBillCategoryInput, CreateBillInput,
+  MoveCategoryInput, RecordBillPaymentInput, UpdateBillCategoryInput, UpdateBillInput, UpdateOccurrenceAmountInput,
+  WaiveOccurrenceInput,
+} from "@household/shared";
 import { del, get, patch, post } from "../../../lib/api";
 
 export function useBillCategories(householdId: string | undefined) {
@@ -157,6 +161,63 @@ export function useUpdateOccurrenceAmount(householdId: string, billId: string) {
   return useMutation({
     mutationFn: ({ occurrenceId, body }: { occurrenceId: string; body: UpdateOccurrenceAmountInput }) =>
       patch<BillOccurrenceDTO>(`/households/${householdId}/bills/${billId}/occurrences/${occurrenceId}`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["bill-occurrences", householdId, billId] }),
+  });
+}
+
+export function useOccurrencePayments(householdId: string | undefined, billId: string | undefined, occurrenceId: string | undefined) {
+  return useQuery({
+    queryKey: ["bill-occurrence-payments", householdId, billId, occurrenceId],
+    queryFn: ({ signal }) =>
+      get<BillPaymentDTO[]>(`/households/${householdId}/bills/${billId}/occurrences/${occurrenceId}/payments`, signal).then((r) => r.data),
+    enabled: !!householdId && !!billId && !!occurrenceId,
+  });
+}
+
+/**
+ * Payment record/void and waive/unwaive all change the occurrence's own status/amountPaidPaise, so
+ * every one of these mutations must invalidate the occurrence-list key alongside whatever's specific
+ * to it (same lesson as Spec 2's final-review fix for `invalidateBillQueries` above) — otherwise the
+ * list keeps showing a stale status/amount after a successful mutation until an unrelated refetch.
+ */
+function invalidateOccurrenceQueries(qc: ReturnType<typeof useQueryClient>, householdId: string, billId: string, occurrenceId: string) {
+  return Promise.all([
+    qc.invalidateQueries({ queryKey: ["bill-occurrences", householdId, billId] }),
+    qc.invalidateQueries({ queryKey: ["bill-occurrence-payments", householdId, billId, occurrenceId] }),
+  ]);
+}
+
+export function useRecordPayment(householdId: string, billId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ occurrenceId, body }: { occurrenceId: string; body: RecordBillPaymentInput }) =>
+      post<BillPaymentDTO>(`/households/${householdId}/bills/${billId}/occurrences/${occurrenceId}/payments`, body),
+    onSuccess: (_data, { occurrenceId }) => invalidateOccurrenceQueries(qc, householdId, billId, occurrenceId),
+  });
+}
+
+export function useVoidPayment(householdId: string, billId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ occurrenceId, paymentId, reason }: { occurrenceId: string; paymentId: string; reason?: string }) =>
+      del<null>(`/households/${householdId}/bills/${billId}/occurrences/${occurrenceId}/payments/${paymentId}${reason ? `?reason=${encodeURIComponent(reason)}` : ""}`),
+    onSuccess: (_data, { occurrenceId }) => invalidateOccurrenceQueries(qc, householdId, billId, occurrenceId),
+  });
+}
+
+export function useWaiveOccurrence(householdId: string, billId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ occurrenceId, body }: { occurrenceId: string; body: WaiveOccurrenceInput }) =>
+      post<BillOccurrenceDTO>(`/households/${householdId}/bills/${billId}/occurrences/${occurrenceId}/waive`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["bill-occurrences", householdId, billId] }),
+  });
+}
+
+export function useUnwaiveOccurrence(householdId: string, billId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (occurrenceId: string) => post<BillOccurrenceDTO>(`/households/${householdId}/bills/${billId}/occurrences/${occurrenceId}/unwaive`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["bill-occurrences", householdId, billId] }),
   });
 }
