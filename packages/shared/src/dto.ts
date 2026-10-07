@@ -102,3 +102,8 @@ export type SalaryPaymentDTO = {
   id: string; settlementId: string; amountPaise: number; paidOn: string; method: PaymentMethod;
   reference: string | null; notes: string | null; voidedAt: string | null; createdAt: string;
 };
+
+export type BillPaymentDTO = {
+  id: string; occurrenceId: string; amountPaise: number; paidOn: string; method: PaymentMethod;
+  transactionRef: string | null; notes: string | null; voidedAt: string | null; voidReason: string | null; createdAt: string;
+};

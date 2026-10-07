@@ -325,3 +325,18 @@ export const occurrenceStatusSchema = z.enum(["PENDING", "PARTIALLY_PAID", "PAID
 
 export const updateOccurrenceAmountSchema = z.object({ amountDuePaise: paiseSchema });
 export type UpdateOccurrenceAmountInput = z.infer<typeof updateOccurrenceAmountSchema>;
+
+export const recordBillPaymentSchema = z.object({
+  amountPaise: paiseSchema.refine((v) => v > 0, "Amount must be positive"),
+  paidOn: dateSchema,
+  method: paymentMethodSchema,
+  transactionRef: z.string().trim().max(200).optional(),
+  notes: z.string().trim().max(500).optional(),
+});
+
+export const waiveOccurrenceSchema = z.object({
+  reason: z.string().trim().max(500).optional(),
+});
+
+export type RecordBillPaymentInput = z.infer<typeof recordBillPaymentSchema>;
+export type WaiveOccurrenceInput = z.infer<typeof waiveOccurrenceSchema>;
