@@ -18,26 +18,43 @@ export interface Queue {
   scheduleRepeating(jobName: string, data: unknown, everyMs: number): Promise<void>;
 }
 
-/** Real implementation: a BullMQ `Queue` (scheduling) + `Worker` (processing) pair over Redis. */
+export interface BullMQQueueOptions {
+  /**
+   * When `true`, also constructs a BullMQ `Worker`, which begins consuming jobs from Redis
+   * immediately on construction (BullMQ workers default to `autorun: true`) — before
+   * `registerHandler` is ever called. Only the dedicated worker process should pass `true`.
+   * Processes that only need to produce/schedule jobs (e.g. the API server) must leave this
+   * `false` (the default), or they'll race the worker process for every job.
+   */
+  consume?: boolean;
+}
+
+/** Real implementation: a BullMQ `Queue` (scheduling), optionally paired with a `Worker` (processing) over Redis. */
 export class BullMQQueue implements Queue {
   private readonly handlers = new Map<string, JobHandler>();
   private readonly queue: BullQueue;
-  private readonly worker: BullWorker;
+  private readonly worker?: BullWorker;
 
-  constructor(env: Env, logger: Logger) {
+  constructor(env: Env, logger: Logger, options: BullMQQueueOptions = {}) {
     const connection = { url: env.REDIS_URL };
     this.queue = new BullQueue(QUEUE_NAME, { connection });
-    this.worker = new BullWorker(
-      QUEUE_NAME,
-      async (job) => {
-        const handler = this.handlers.get(job.name);
-        if (!handler) throw new Error(`no handler registered for job "${job.name}"`);
-        await handler(job.data);
-      },
-      { connection },
-    );
-    this.worker.on("failed", (job, err) => logger.error({ jobName: job?.name, err }, "job failed"));
-    this.worker.on("error", (err) => logger.error({ err }, "queue worker error"));
+    // Without a listener, BullMQ falls back to a raw `console.error` per emitted error (e.g. a
+    // flood of ECONNREFUSED stack dumps when Redis is unreachable). Route it through pino instead.
+    this.queue.on("error", (err) => logger.error({ err }, "queue error"));
+
+    if (options.consume) {
+      this.worker = new BullWorker(
+        QUEUE_NAME,
+        async (job) => {
+          const handler = this.handlers.get(job.name);
+          if (!handler) throw new Error(`no handler registered for job "${job.name}"`);
+          await handler(job.data);
+        },
+        { connection },
+      );
+      this.worker.on("failed", (job, err) => logger.error({ jobName: job?.name, err }, "job failed"));
+      this.worker.on("error", (err) => logger.error({ err }, "queue worker error"));
+    }
   }
 
   registerHandler(jobName: string, handler: JobHandler): void {
@@ -49,9 +66,9 @@ export class BullMQQueue implements Queue {
     await this.queue.upsertJobScheduler(jobName, { every: everyMs }, { name: jobName, data });
   }
 
-  /** Closes the worker and queue's Redis connections; call during process shutdown. */
+  /** Closes the worker (if consuming) and the queue's Redis connections; call during process shutdown. */
   async close(): Promise<void> {
-    await this.worker.close();
+    await this.worker?.close();
     await this.queue.close();
   }
 }

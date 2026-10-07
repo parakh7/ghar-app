@@ -11,7 +11,10 @@ const logger = createLogger(env);
 const pool = createPool(env.DATABASE_URL);
 const db = createDb(pool);
 const email = env.EMAIL_PROVIDER === "memory" ? new MemoryEmailProvider() : new ConsoleEmailProvider(logger);
-const queue = new BullMQQueue(env, logger);
+// `{ consume: false }` (the default): the API server only schedules/produces jobs via
+// `deps.queue` — it never registers a handler and never processes jobs itself. Job processing
+// belongs exclusively to the dedicated worker process (see `worker.ts`).
+const queue = new BullMQQueue(env, logger, { consume: false });
 
 const app = createApp({ env, db, logger, clock: systemClock, email, queue });
 const server = app.listen(env.PORT, () => logger.info({ port: env.PORT, env: env.NODE_ENV }, "API listening"));

@@ -12,18 +12,17 @@ const logger = createLogger(env);
 const pool = createPool(env.DATABASE_URL);
 const db = createDb(pool);
 const email = env.EMAIL_PROVIDER === "memory" ? new MemoryEmailProvider() : new ConsoleEmailProvider(logger);
-const queue = new BullMQQueue(env, logger);
 
-// Constructing the Deps is already what starts job processing: the BullMQQueue's internal
-// Worker begins polling Redis as soon as it's created. Register handlers and schedule
-// repeating jobs immediately after, to minimize (not eliminate) the window where a due
-// job could arrive before its handler is registered.
+// `{ consume: true }` is what starts job processing here: it makes BullMQQueue construct an
+// internal BullMQ Worker, which begins polling Redis as soon as it's created (BullMQ workers
+// default to `autorun: true`). This is the only place in the codebase that should pass
+// `{ consume: true }` — the API server (`server.ts`) only ever schedules jobs, never processes
+// them, so it omits this flag.
+const queue = new BullMQQueue(env, logger, { consume: true });
+
 const deps: Deps = { env, db, logger, clock: systemClock, email, queue };
 
 deps.queue.registerHandler("heartbeat", () => runHeartbeat(deps));
-await deps.queue.scheduleRepeating("heartbeat", {}, 60_000);
-
-logger.info({ env: env.NODE_ENV }, "worker listening for jobs");
 
 process.on("unhandledRejection", (reason) => logger.error({ err: reason }, "unhandled promise rejection"));
 
@@ -38,3 +37,10 @@ async function shutdown(signal: string) {
 }
 process.on("SIGTERM", () => void shutdown("SIGTERM"));
 process.on("SIGINT", () => void shutdown("SIGINT"));
+
+// Registered above, before this await: if Redis is unreachable, ioredis queues this command
+// and retries indefinitely, so this await can hang — the signal handlers must already be live
+// so graceful shutdown still works while waiting on it.
+await deps.queue.scheduleRepeating("heartbeat", {}, 60_000);
+
+logger.info({ env: env.NODE_ENV }, "worker listening for jobs");

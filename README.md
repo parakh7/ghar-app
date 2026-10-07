@@ -103,7 +103,7 @@ household-app/
 
 ## Local setup
 
-**Prerequisites:** Node 22 (`.nvmrc`; ≥ 20.11 works), PostgreSQL 14+.
+**Prerequisites:** Node 22 (`.nvmrc`; ≥ 20.11 works), PostgreSQL 14+, Docker (for local Redis).
 
 ```bash
 # 1. Install
@@ -114,17 +114,22 @@ psql -c "CREATE USER app WITH PASSWORD 'app' CREATEDB;"
 createdb -O app household_dev
 createdb -O app household_test
 
-# 3. Environment
+# 3. Redis (for Phase 7's BullMQ job queue)
+docker compose up -d redis
+
+# 4. Environment
 cp apps/api/.env.example apps/api/.env      # defaults match the commands above
 
-# 4. Schema + demo data
+# 5. Schema + demo data
 npm run build -w @household/shared
 npm run db:migrate
 npm run db:seed
 
-# 5. Run
+# 6. Run
 npm run dev          # API on :4000, web on :5173
 ```
+
+The root `docker-compose.yml` runs Redis (loopback-only, `127.0.0.1:6379`) for local development; no other services are containerized yet.
 
 Open <http://localhost:5173> and sign in as **parakh@example.com / demo-password-123**. The seed also creates *mother@example.com* and *father@example.com* (same password) as MEMBERs of "Shah Family". Mother has bill reminders switched off, to exercise per-user preferences in Phase 7.
 
@@ -150,7 +155,8 @@ All variables are validated at startup (`apps/api/src/config/env.ts`); the API r
 | `RATE_LIMIT_GLOBAL_MAX` | `300` | Requests per minute per IP |
 | `LOG_LEVEL` | `info` | pino level |
 | `LOG_PRETTY` | dev: `true` | Human-readable logs |
-| `REDIS_URL`, `VAPID_*` | — | Reserved for Phase 7 |
+| `REDIS_URL` | `redis://localhost:6379` | BullMQ job queue (Phase 7) |
+| `VAPID_*` | — | Reserved for Phase 7 (web push, deferred) |
 | `VITE_API_URL` (web) | same origin | Only if the API is on a different origin |
 
 `.env` is git-ignored. Never commit secrets.
@@ -181,9 +187,10 @@ Review generated SQL before committing it.
 ## Running the apps
 
 ```bash
-npm run dev        # both
+npm run dev        # API + web
 npm run dev:api    # API only (tsx watch)
 npm run dev:web    # web only (Vite; proxies /api → :4000)
+npm run dev:worker # worker only (tsx watch) — processes BullMQ jobs; needs Redis running
 ```
 
 ## Testing
