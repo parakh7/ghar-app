@@ -10,7 +10,7 @@ import { Button } from "../../../components/Button";
 import { TextField } from "../../../components/TextField";
 import { useActiveHousehold } from "../useActiveHousehold";
 import { useHousehold } from "../members/useMembers";
-import { formatBillFrequency } from "./billFrequency";
+import { formatBillFrequency, PAYMENT_METHOD_OPTIONS } from "./billFrequency";
 import { STATUS_LABEL, toneOf } from "./statusTone";
 import { STATUS_LABEL as OCCURRENCE_STATUS_LABEL, toneOf as occurrenceToneOf } from "./occurrenceStatusTone";
 import {
@@ -20,16 +20,6 @@ import {
 } from "./useBills";
 
 const AMOUNT_HINT = "Enter a valid rupee amount, e.g. 1500 or 1,500.50";
-
-const PAYMENT_METHODS = [
-  { value: "CASH", label: "Cash" },
-  { value: "UPI", label: "UPI" },
-  { value: "BANK_TRANSFER", label: "Bank transfer" },
-  { value: "CARD", label: "Card" },
-  { value: "AUTO_DEBIT", label: "Auto-debit" },
-  { value: "CHEQUE", label: "Cheque" },
-  { value: "OTHER", label: "Other" },
-] as const;
 
 function messageFrom(err: unknown): string {
   return err instanceof ApiError ? err.message : "Something went wrong. Please try again.";
@@ -56,8 +46,16 @@ function OccurrenceRow({
   const [paymentError, setPaymentError] = useState<string | undefined>(undefined);
   const [paymentForm, setPaymentForm] = useState(() => ({
     amount: "", paidOn: dateInZone(new Date(), timezone),
-    method: "CASH" as (typeof PAYMENT_METHODS)[number]["value"], transactionRef: "", notes: "",
+    method: "CASH" as (typeof PAYMENT_METHOD_OPTIONS)[number]["value"], transactionRef: "", notes: "",
   }));
+
+  const canRecordThisPayment = canRecordPayment && occ.status !== "WAIVED" && occ.amountPaidPaise < occ.amountDuePaise;
+  // The occurrence can stop being payable while the form sits open — waiving it from this row's own
+  // Waive button is the obvious case, but another member's change arriving on a refetch does it too.
+  // Deriving visibility from BOTH the open state and payability (rather than resetting the open
+  // state after the fact) means the form can never render in a state the API would 400, not even
+  // for one frame.
+  const paymentFormOpen = showPaymentForm && canRecordThisPayment;
 
   function startEditAmount() {
     setEditingAmount(true);
@@ -121,6 +119,11 @@ function OccurrenceRow({
   function onWaive() {
     const reason = window.prompt("Reason for waiving this occurrence (optional):");
     if (reason === null) return;
+    // Discard any half-filled payment form outright: a waived occurrence can't accept payments, so
+    // the derived `paymentFormOpen` would hide it anyway — this also stops it reappearing with
+    // stale input if the occurrence is later unwaived.
+    setShowPaymentForm(false);
+    setPaymentError(undefined);
     waive.mutate({ occurrenceId: occ.id, body: { reason: reason.trim() || undefined } }, { onError: (err) => onError(err) });
   }
 
@@ -130,7 +133,6 @@ function OccurrenceRow({
   }
 
   const payments = paymentsQuery.data ?? [];
-  const canRecordThisPayment = canRecordPayment && occ.status !== "WAIVED" && occ.amountPaidPaise < occ.amountDuePaise;
 
   return (
     <div className="list__item" style={{ display: "block" }}>
@@ -175,7 +177,7 @@ function OccurrenceRow({
             <div key={p.id} className="list__item">
               <span className="list__text">
                 <span className="list__label" style={{ display: "block" }}>
-                  {formatINR(p.amountPaise)} · {PAYMENT_METHODS.find((m) => m.value === p.method)?.label ?? p.method}{p.voidedAt && " (voided)"}
+                  {formatINR(p.amountPaise)} · {PAYMENT_METHOD_OPTIONS.find((m) => m.value === p.method)?.label ?? p.method}{p.voidedAt && " (voided)"}
                 </span>
                 <span className="list__meta">{p.paidOn}{p.transactionRef && ` · ${p.transactionRef}`}{p.notes && ` · ${p.notes}`}</span>
               </span>
@@ -188,7 +190,7 @@ function OccurrenceRow({
       )}
 
       <div style={{ marginTop: "var(--space-2)", display: "flex", gap: "var(--space-2)", flexWrap: "wrap" }}>
-        {canRecordThisPayment && !showPaymentForm && (
+        {canRecordThisPayment && !paymentFormOpen && (
           <Button variant="ghost" onClick={() => setShowPaymentForm(true)}>Record payment</Button>
         )}
         {canManage && occ.status === "PENDING" && (
@@ -199,7 +201,7 @@ function OccurrenceRow({
         )}
       </div>
 
-      {showPaymentForm && (
+      {paymentFormOpen && (
         <form onSubmit={onRecordPayment} style={{ marginTop: "var(--space-2)", display: "grid", gap: "var(--space-2)" }}>
           <TextField
             label="Amount (₹)" inputMode="decimal" value={paymentForm.amount}
@@ -215,7 +217,7 @@ function OccurrenceRow({
               id={`pay-method-${occ.id}`} className="input" value={paymentForm.method}
               onChange={(e) => setPaymentForm((f) => ({ ...f, method: e.target.value as typeof f.method }))}
             >
-              {PAYMENT_METHODS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+              {PAYMENT_METHOD_OPTIONS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
             </select>
           </div>
           <TextField

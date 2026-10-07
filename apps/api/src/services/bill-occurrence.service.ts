@@ -1,7 +1,7 @@
 import { and, asc, eq, gte, inArray, lte } from "drizzle-orm";
 import type { BillOccurrenceDTO, BillFrequency, BillStatus, OccurrenceStatus, UpdateOccurrenceAmountInput, WaiveOccurrenceInput } from "@household/shared";
 import { dateInZone, daysBetween, occurrenceDueDate, parseDateParts } from "@household/shared";
-import { bills, billOccurrences } from "../db/schema.js";
+import { bills, billOccurrences, billPayments } from "../db/schema.js";
 import type { DbOrTx } from "../db/client.js";
 import { Errors } from "../lib/errors.js";
 import { recordAudit } from "./audit.service.js";
@@ -72,10 +72,19 @@ function oneYearAgo(date: string): string {
 }
 
 /**
- * Unlocked = still exactly what generation would produce and nothing real has happened to it yet:
+ * Unlocked = still exactly what generation would produce, judged from the occurrence row ALONE:
  * PENDING, nothing paid, not yet due. Everything else — paid, waived, partially paid, or simply
  * due-or-past-due — is locked: a household member may already be relying on the amount/date shown,
  * so the generator must never rewrite or remove it, no matter how the bill's schedule changes later.
+ *
+ * NOT sufficient on its own: a record-payment → void-payment round trip legitimately returns a row
+ * to `PENDING`/`amountPaidPaise: 0`, so this predicate reports "unlocked" for a row that still owns
+ * soft-deleted `bill_payments` children (`bp_occurrence_fk` is `ON DELETE no action`, deliberately —
+ * cascading would silently destroy payment history). Deleting such a row raises an FK violation,
+ * which 500s both `PATCH /bills/:id` and the passive `/occurrences/sync` every bill-detail page view
+ * calls — permanently, since every repair path routes back through `ensureOccurrences`. Callers must
+ * therefore AND this with "has no `bill_payments` row at all" before treating a row as deletable;
+ * `ensureOccurrences` does exactly that via `occurrenceIdsWithAnyPayment`.
  */
 function isUnlocked(row: OccurrenceRow, today: string): boolean {
   return row.status === "PENDING" && row.amountPaidPaise === 0 && row.dueDate > today;
@@ -211,6 +220,14 @@ export async function ensureOccurrences(
     const existingRows = await tx.select().from(billOccurrences)
       .where(and(eq(billOccurrences.householdId, bill.householdId), eq(billOccurrences.billId, bill.id)));
 
+    // Every occurrence of this bill that has EVER had a payment recorded against it — voided or
+    // not. No `voidedAt` filter on purpose: a voided payment is still real history (and still a
+    // live FK child row), so either kind means "this occurrence must never be deleted out from
+    // under it". See `isUnlocked`'s doc comment for why the row's own columns can't tell us this.
+    const paymentRows = await tx.selectDistinct({ occurrenceId: billPayments.occurrenceId }).from(billPayments)
+      .where(and(eq(billPayments.householdId, bill.householdId), eq(billPayments.billId, bill.id)));
+    const occurrenceIdsWithAnyPayment = new Set(paymentRows.map((p) => p.occurrenceId));
+
     // Initial generation backfills overdue history (clamped to 12 months back for recurring
     // frequencies, so a very old `firstDueDate` can't produce an unbounded number of historical
     // rows — ONE_TIME is exempt from that floor, see `ruleDatesWithin`). Every other resync only
@@ -232,7 +249,7 @@ export async function ensureOccurrences(
     let maxSequence = -1;
     for (const row of existingRows) {
       maxSequence = Math.max(maxSequence, row.sequence);
-      if (isUnlocked(row, today)) unlockedByDate.set(row.dueDate, row);
+      if (isUnlocked(row, today) && !occurrenceIdsWithAnyPayment.has(row.id)) unlockedByDate.set(row.dueDate, row);
       else lockedDates.add(row.dueDate);
     }
 
@@ -386,10 +403,12 @@ export async function waiveOccurrence(
 }
 
 /**
- * Reverses `waiveOccurrence`, returning the occurrence to a clean `PENDING` state (no payments can
- * exist against it — `waiveOccurrence` only ever accepts an unpaid `PENDING` occurrence — so there is
- * never a payment total to recompute here, unlike `recordPayment`/`voidPayment`). Only a currently
- * `WAIVED` occurrence may be unwaived.
+ * Reverses `waiveOccurrence`, returning the occurrence to a clean `PENDING` state (no ACTIVE payment
+ * can exist against it — `waiveOccurrence` only ever accepts an unpaid `PENDING` occurrence — so
+ * there is never a payment total to recompute here, unlike `recordPayment`/`voidPayment`; voided
+ * payment rows may still exist from an earlier record→void round trip, but they sum to zero and
+ * `ensureOccurrences` already treats their presence as a reason never to delete the row). Only a
+ * currently `WAIVED` occurrence may be unwaived.
  *
  * Scoped by `(householdId, billId, occurrenceId)` — same `billId`-matches-URL guard as
  * `updateOccurrenceAmount` above, for the same reason.

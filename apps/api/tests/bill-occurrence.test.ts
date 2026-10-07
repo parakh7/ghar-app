@@ -566,6 +566,124 @@ describe("bill occurrence generation and sync", () => {
     });
   });
 
+  /**
+   * Cross-spec composition gap between Spec 2's reconciler and Spec 3's `bill_payments` table.
+   * `isUnlocked` judges a row from its own columns only (PENDING / nothing paid / not yet due) —
+   * correct when nothing could ever have a payment against it, but a record→void round trip
+   * legitimately returns a row to exactly that state while leaving a soft-deleted `bill_payments`
+   * child behind. `bp_occurrence_fk` is `ON DELETE no action` (deliberately — cascading would
+   * silently destroy payment history), so the delete-out-of-range step then raised an FK violation
+   * that 500'd BOTH `PATCH /bills/:id` and the passive `/occurrences/sync` that every bill-detail
+   * page view calls — permanently, for every household member, since every repair path routes back
+   * through `ensureOccurrences`.
+   */
+  describe("occurrences with payment history survive a schedule change (FK-violation regression)", () => {
+    function recordPayment(cookie: string, householdId: string, billId: string, occurrenceId: string, body: Record<string, unknown>) {
+      return ctx.request.post(`/api/households/${householdId}/bills/${billId}/occurrences/${occurrenceId}/payments`).set(csrf).set("cookie", cookie).send(body);
+    }
+    function listPayments(cookie: string, householdId: string, billId: string, occurrenceId: string) {
+      return ctx.request.get(`/api/households/${householdId}/bills/${billId}/occurrences/${occurrenceId}/payments`).set("cookie", cookie);
+    }
+
+    it("record -> void -> reschedule the date out of the rule -> /sync stays 200, and the occurrence keeps its payment history", async () => {
+      const owner = await signupUser(ctx);
+      const h = await createHousehold(ctx, owner.cookie);
+      const bill = await createBill(h, owner.cookie, { name: "Test bill", frequency: "MONTHLY", firstDueDate: "2026-11-05", amountPaise: 100000 });
+      const before = await listOccurrences(h, bill.id, owner.cookie);
+      // A FUTURE occurrence (relative to TODAY = 2026-09-29) — a past-due one would already be
+      // locked by date alone, which would hide the bug this test exists for.
+      const target = before.find((o) => o.dueDate === "2026-12-05")!;
+
+      const payRes = await recordPayment(owner.cookie, h.id, bill.id, target.id, { amountPaise: 100000, paidOn: "2026-09-29", method: "CASH" });
+      expect(payRes.status).toBe(201);
+      const paymentId = payRes.body.data.id as string;
+
+      const voidRes = await ctx.request
+        .delete(`/api/households/${h.id}/bills/${bill.id}/occurrences/${target.id}/payments/${paymentId}?reason=${encodeURIComponent("Recorded against the wrong month")}`)
+        .set(csrf).set("cookie", owner.cookie);
+      expect(voidRes.status).toBe(200);
+
+      // The void correctly returns the occurrence to a clean PENDING/unpaid state — which is exactly
+      // what made `isUnlocked` wrongly classify it as safe to delete.
+      const afterVoid = (await listOccurrences(h, bill.id, owner.cookie)).find((o) => o.id === target.id)!;
+      expect(afterVoid).toMatchObject({ status: "PENDING", amountPaidPaise: 0 });
+
+      // Shift the schedule by a day so 2026-12-05 is no longer a date the rule produces.
+      const patchRes = await ctx.request.patch(`/api/households/${h.id}/bills/${bill.id}`).set(csrf).set("cookie", owner.cookie)
+        .send({ firstDueDate: "2026-11-06" });
+      expect(patchRes.status).toBe(200);
+
+      // The endpoint `useOccurrences` hits on EVERY bill-detail page mount — this is what used to
+      // 500 forever once the bad state existed.
+      const syncRes = await ctx.request.post(`/api/households/${h.id}/bills/${bill.id}/occurrences/sync`).set(csrf).set("cookie", owner.cookie);
+      expect(syncRes.status).toBe(200);
+
+      const after = await listOccurrences(h, bill.id, owner.cookie);
+      const survivor = after.find((o) => o.id === target.id);
+      expect(survivor).toMatchObject({ dueDate: "2026-12-05", status: "PENDING", amountPaidPaise: 0 });
+
+      // And its payment history is intact, not quietly destroyed to make the delete succeed.
+      const paymentsRes = await listPayments(owner.cookie, h.id, bill.id, target.id);
+      expect(paymentsRes.status).toBe(200);
+      expect(paymentsRes.body.data).toHaveLength(1);
+      expect(paymentsRes.body.data[0]).toMatchObject({ id: paymentId, amountPaise: 100000 });
+      expect(paymentsRes.body.data[0].voidedAt).not.toBeNull();
+
+      // Repeated syncs stay healthy too (the old failure was permanent, not one-shot).
+      const syncAgain = await ctx.request.post(`/api/households/${h.id}/bills/${bill.id}/occurrences/sync`).set(csrf).set("cookie", owner.cookie);
+      expect(syncAgain.status).toBe(200);
+      expect((await listOccurrences(h, bill.id, owner.cookie)).some((o) => o.id === target.id)).toBe(true);
+    });
+
+    it("an occurrence with an ACTIVE payment is likewise never deleted when the schedule moves off its date", async () => {
+      const owner = await signupUser(ctx);
+      const h = await createHousehold(ctx, owner.cookie);
+      const bill = await createBill(h, owner.cookie, { name: "Test bill", frequency: "MONTHLY", firstDueDate: "2026-11-05", amountPaise: 100000 });
+      const target = (await listOccurrences(h, bill.id, owner.cookie)).find((o) => o.dueDate === "2026-12-05")!;
+
+      // Partial payment: PARTIALLY_PAID is already locked by status, but this also pins the
+      // "has an active payment row" half of the new rule.
+      expect((await recordPayment(owner.cookie, h.id, bill.id, target.id, { amountPaise: 1000, paidOn: "2026-09-29", method: "UPI" })).status).toBe(201);
+
+      const patchRes = await ctx.request.patch(`/api/households/${h.id}/bills/${bill.id}`).set(csrf).set("cookie", owner.cookie)
+        .send({ firstDueDate: "2026-11-06" });
+      expect(patchRes.status).toBe(200);
+
+      const after = await listOccurrences(h, bill.id, owner.cookie);
+      expect(after.find((o) => o.id === target.id)).toMatchObject({ dueDate: "2026-12-05", status: "PARTIALLY_PAID", amountPaidPaise: 1000 });
+    });
+
+    /**
+     * The deliberate non-case, documented so it isn't mistaken for the bug above: a
+     * waive→unwaive round trip leaves NO payment row behind, so the occurrence really is back to
+     * "exactly what generation would produce, nothing of value attached". Once the schedule no
+     * longer calls for its date it is correctly deleted like any other unlocked row — no FK child
+     * exists to violate, and no history is lost.
+     */
+    it("a waived-then-unwaived occurrence with no payment history is still (correctly) deleted when the schedule moves off its date", async () => {
+      const owner = await signupUser(ctx);
+      const h = await createHousehold(ctx, owner.cookie);
+      const bill = await createBill(h, owner.cookie, { name: "Test bill", frequency: "MONTHLY", firstDueDate: "2026-11-05", amountPaise: 100000 });
+      const target = (await listOccurrences(h, bill.id, owner.cookie)).find((o) => o.dueDate === "2026-12-05")!;
+
+      const waiveRes = await ctx.request.post(`/api/households/${h.id}/bills/${bill.id}/occurrences/${target.id}/waive`).set(csrf).set("cookie", owner.cookie).send({});
+      expect(waiveRes.status).toBe(200);
+
+      // While WAIVED the row is locked outright — a reschedule leaves it alone.
+      expect((await ctx.request.patch(`/api/households/${h.id}/bills/${bill.id}`).set(csrf).set("cookie", owner.cookie).send({ firstDueDate: "2026-11-06" })).status).toBe(200);
+      expect((await listOccurrences(h, bill.id, owner.cookie)).some((o) => o.id === target.id)).toBe(true);
+
+      const unwaiveRes = await ctx.request.post(`/api/households/${h.id}/bills/${bill.id}/occurrences/${target.id}/unwaive`).set(csrf).set("cookie", owner.cookie);
+      expect(unwaiveRes.status).toBe(200);
+
+      const syncRes = await ctx.request.post(`/api/households/${h.id}/bills/${bill.id}/occurrences/sync`).set(csrf).set("cookie", owner.cookie);
+      expect(syncRes.status).toBe(200);
+
+      // Gone, and that's correct: 2026-12-05 is no longer a rule date and nothing was ever paid.
+      expect((await listOccurrences(h, bill.id, owner.cookie)).some((o) => o.id === target.id)).toBe(false);
+    });
+  });
+
   describe("updateOccurrenceAmount", () => {
     it("updates the amount of a PENDING occurrence and records an audit entry", async () => {
       const owner = await signupUser(ctx);

@@ -6,9 +6,9 @@ export const STATUS_LABEL: Record<OccurrenceStatus, string> = {
   PENDING: "Pending", PARTIALLY_PAID: "Partially paid", PAID: "Paid", WAIVED: "Waived",
 };
 
-// Mirrors salary/statusTone.ts's PENDING/PARTIALLY_PAID/PAID tone mapping (this spec can only ever
-// produce PENDING end-to-end right now — payment recording and waiving land in Spec 3 — but the
-// DTO's status type covers all four, so every tone is mapped regardless of what's reachable today).
+// Mirrors salary/statusTone.ts's PENDING/PARTIALLY_PAID/PAID tone mapping. All four statuses are
+// reachable end-to-end: generation produces PENDING, payment recording produces PARTIALLY_PAID/PAID,
+// and waiving produces WAIVED.
 const STATUS_TONE: Record<OccurrenceStatus, StatusTone> = {
   PENDING: "due-soon", PARTIALLY_PAID: "info", PAID: "ok", WAIVED: "muted",
 };
