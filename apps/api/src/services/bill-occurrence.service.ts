@@ -1,5 +1,5 @@
 import { and, asc, eq, gte, inArray, lte } from "drizzle-orm";
-import type { BillOccurrenceDTO, BillFrequency, BillStatus, OccurrenceStatus, UpdateOccurrenceAmountInput } from "@household/shared";
+import type { BillOccurrenceDTO, BillFrequency, BillStatus, OccurrenceStatus, UpdateOccurrenceAmountInput, WaiveOccurrenceInput } from "@household/shared";
 import { dateInZone, daysBetween, occurrenceDueDate, parseDateParts } from "@household/shared";
 import { bills, billOccurrences } from "../db/schema.js";
 import type { DbOrTx } from "../db/client.js";
@@ -345,6 +345,73 @@ export async function updateOccurrenceAmount(
     await recordAudit(tx, {
       householdId: membership.householdId, actorUserId, action: "bill.occurrenceAmountUpdated", entityType: "bill_occurrence", entityId: occurrenceId,
       oldValue: { amountDuePaise: before.amountDuePaise }, newValue: { amountDuePaise: input.amountDuePaise }, ipAddress: ip ?? null,
+    });
+    return updated!;
+  });
+  return toOccurrenceDTO(row);
+}
+
+/**
+ * Waives a pending occurrence — the household has decided it's not owed (e.g. a fee reversed by the
+ * provider), distinct from it being paid. Only a still-open `PENDING` occurrence may be waived: one
+ * that's already `PARTIALLY_PAID`/`PAID` has real money moving against it that waiving would silently
+ * discard, and an already-`WAIVED` occurrence can't be waived again.
+ *
+ * Scoped by `(householdId, billId, occurrenceId)` — same `billId`-matches-URL guard as
+ * `updateOccurrenceAmount` above, for the same reason.
+ */
+export async function waiveOccurrence(
+  deps: Deps, actorUserId: string, membership: Membership, billId: string, occurrenceId: string, input: WaiveOccurrenceInput, ip?: string,
+): Promise<BillOccurrenceDTO> {
+  const row = await deps.db.transaction(async (tx) => {
+    const [before] = await tx.select().from(billOccurrences)
+      .where(and(eq(billOccurrences.householdId, membership.householdId), eq(billOccurrences.id, occurrenceId)))
+      .for("update");
+    if (!before || before.billId !== billId) throw Errors.notFound("Occurrence");
+    if (before.status !== "PENDING") {
+      throw Errors.validation({ status: `Only a pending occurrence can be waived (this one is ${before.status}).` });
+    }
+
+    const waivedAt = deps.clock.now();
+    const [updated] = await tx.update(billOccurrences).set({ status: "WAIVED", waivedAt, waivedByUserId: actorUserId })
+      .where(eq(billOccurrences.id, occurrenceId)).returning();
+    await recordAudit(tx, {
+      householdId: membership.householdId, actorUserId, action: "bill.occurrenceWaived", entityType: "bill_occurrence", entityId: occurrenceId,
+      oldValue: { status: before.status, waivedAt: before.waivedAt, waivedByUserId: before.waivedByUserId },
+      newValue: { status: "WAIVED", waivedAt, waivedByUserId: actorUserId, reason: input.reason ?? null }, ipAddress: ip ?? null,
+    });
+    return updated!;
+  });
+  return toOccurrenceDTO(row);
+}
+
+/**
+ * Reverses `waiveOccurrence`, returning the occurrence to a clean `PENDING` state (no payments can
+ * exist against it — `waiveOccurrence` only ever accepts an unpaid `PENDING` occurrence — so there is
+ * never a payment total to recompute here, unlike `recordPayment`/`voidPayment`). Only a currently
+ * `WAIVED` occurrence may be unwaived.
+ *
+ * Scoped by `(householdId, billId, occurrenceId)` — same `billId`-matches-URL guard as
+ * `updateOccurrenceAmount` above, for the same reason.
+ */
+export async function unwaiveOccurrence(
+  deps: Deps, actorUserId: string, membership: Membership, billId: string, occurrenceId: string, ip?: string,
+): Promise<BillOccurrenceDTO> {
+  const row = await deps.db.transaction(async (tx) => {
+    const [before] = await tx.select().from(billOccurrences)
+      .where(and(eq(billOccurrences.householdId, membership.householdId), eq(billOccurrences.id, occurrenceId)))
+      .for("update");
+    if (!before || before.billId !== billId) throw Errors.notFound("Occurrence");
+    if (before.status !== "WAIVED") {
+      throw Errors.validation({ status: `Only a waived occurrence can be unwaived (this one is ${before.status}).` });
+    }
+
+    const [updated] = await tx.update(billOccurrences).set({ status: "PENDING", waivedAt: null, waivedByUserId: null })
+      .where(eq(billOccurrences.id, occurrenceId)).returning();
+    await recordAudit(tx, {
+      householdId: membership.householdId, actorUserId, action: "bill.occurrenceUnwaived", entityType: "bill_occurrence", entityId: occurrenceId,
+      oldValue: { status: before.status, waivedAt: before.waivedAt, waivedByUserId: before.waivedByUserId },
+      newValue: { status: "PENDING", waivedAt: null, waivedByUserId: null }, ipAddress: ip ?? null,
     });
     return updated!;
   });

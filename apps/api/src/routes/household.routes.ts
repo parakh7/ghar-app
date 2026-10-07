@@ -1,6 +1,6 @@
 import { Router } from "express";
 import type { OccurrenceStatus } from "@household/shared";
-import { billStatusSchema, createAdjustmentSchema, createBillCategorySchema, createBillSchema, createCategorySchema, createChecklistTaskSchema, createHousehelpSchema, createHouseholdSchema, dateSchema, generateSettlementSchema, inviteMemberSchema, markAttendanceSchema, markCompletionSchema, markHolidaySchema, monthSchema, moveCategorySchema, occurrenceStatusSchema, putAssignmentsSchema, recordPaymentSchema, updateBillCategorySchema, updateBillSchema, updateCategorySchema, updateChecklistTaskSchema, updateHousehelpSchema, updateHouseholdSchema, updateMemberSchema, updateOccurrenceAmountSchema, updateScheduleSchema, voidReasonSchema } from "@household/shared";
+import { billStatusSchema, createAdjustmentSchema, createBillCategorySchema, createBillSchema, createCategorySchema, createChecklistTaskSchema, createHousehelpSchema, createHouseholdSchema, dateSchema, generateSettlementSchema, inviteMemberSchema, markAttendanceSchema, markCompletionSchema, markHolidaySchema, monthSchema, moveCategorySchema, occurrenceStatusSchema, putAssignmentsSchema, recordBillPaymentSchema, recordPaymentSchema, updateBillCategorySchema, updateBillSchema, updateCategorySchema, updateChecklistTaskSchema, updateHousehelpSchema, updateHouseholdSchema, updateMemberSchema, updateOccurrenceAmountSchema, updateScheduleSchema, voidReasonSchema, waiveOccurrenceSchema } from "@household/shared";
 import { requireAuth } from "../middleware/auth.js";
 import { requireHousehold } from "../middleware/household.js";
 import { inviteLimiter } from "../middleware/rate-limit.js";
@@ -12,6 +12,7 @@ import * as attendance from "../services/attendance.service.js";
 import * as billCategories from "../services/bill-category.service.js";
 import * as bills from "../services/bill.service.js";
 import * as billOccurrences from "../services/bill-occurrence.service.js";
+import * as billPayments from "../services/bill-payment.service.js";
 import * as categories from "../services/category.service.js";
 import * as checklistAssignments from "../services/checklist-assignment.service.js";
 import * as checklistCompletions from "../services/checklist-completion.service.js";
@@ -219,6 +220,31 @@ export function householdRoutes(deps: Deps): Router {
   r.patch("/:householdId/bills/:id/occurrences/:occurrenceId", requireHousehold(deps, "bills.manage"), async (req, res) => {
     const input = parseBody(req, updateOccurrenceAmountSchema);
     ok(res, await billOccurrences.updateOccurrenceAmount(deps, req.auth!.user.id, req.membership!, req.params.id as string, req.params.occurrenceId as string, input, req.ip), 200, "Occurrence updated.");
+  });
+
+  r.post("/:householdId/bills/:id/occurrences/:occurrenceId/payments", requireHousehold(deps, "payments.record"), async (req, res) => {
+    const input = parseBody(req, recordBillPaymentSchema);
+    ok(res, await billPayments.recordPayment(deps, req.auth!.user.id, req.membership!, req.params.id as string, req.params.occurrenceId as string, input, req.ip), 201, "Payment recorded.");
+  });
+
+  r.delete("/:householdId/bills/:id/occurrences/:occurrenceId/payments/:paymentId", requireHousehold(deps, "payments.record"), async (req, res) => {
+    let reason: string | undefined;
+    if (req.query.reason !== undefined) {
+      const parsed = voidReasonSchema.safeParse(req.query.reason);
+      if (!parsed.success) throw Errors.validation({ reason: "Reason must be 500 characters or fewer." });
+      reason = parsed.data;
+    }
+    await billPayments.voidPayment(deps, req.auth!.user.id, req.membership!, req.params.id as string, req.params.occurrenceId as string, req.params.paymentId as string, reason, req.ip);
+    ok(res, null, 200, "Payment voided.");
+  });
+
+  r.post("/:householdId/bills/:id/occurrences/:occurrenceId/waive", requireHousehold(deps, "bills.manage"), async (req, res) => {
+    const input = parseBody(req, waiveOccurrenceSchema);
+    ok(res, await billOccurrences.waiveOccurrence(deps, req.auth!.user.id, req.membership!, req.params.id as string, req.params.occurrenceId as string, input, req.ip), 200, "Occurrence waived.");
+  });
+
+  r.post("/:householdId/bills/:id/occurrences/:occurrenceId/unwaive", requireHousehold(deps, "bills.manage"), async (req, res) => {
+    ok(res, await billOccurrences.unwaiveOccurrence(deps, req.auth!.user.id, req.membership!, req.params.id as string, req.params.occurrenceId as string, req.ip), 200, "Occurrence restored.");
   });
 
   r.get("/:householdId/househelps", requireHousehold(deps, "househelps.view"), async (req, res) => {

@@ -715,4 +715,166 @@ describe("bill occurrence generation and sync", () => {
       expect(res.status).toBe(200);
     });
   });
+
+  describe("waiving/unwaiving", () => {
+    function waive(cookie: string, householdId: string, billId: string, occurrenceId: string, body: Record<string, unknown> = {}) {
+      return ctx.request.post(`/api/households/${householdId}/bills/${billId}/occurrences/${occurrenceId}/waive`).set(csrf).set("cookie", cookie).send(body);
+    }
+    function unwaive(cookie: string, householdId: string, billId: string, occurrenceId: string) {
+      return ctx.request.post(`/api/households/${householdId}/bills/${billId}/occurrences/${occurrenceId}/unwaive`).set(csrf).set("cookie", cookie);
+    }
+    function recordPayment(cookie: string, householdId: string, billId: string, occurrenceId: string, body: Record<string, unknown>) {
+      return ctx.request.post(`/api/households/${householdId}/bills/${billId}/occurrences/${occurrenceId}/payments`).set(csrf).set("cookie", cookie).send(body);
+    }
+
+    it("waives a PENDING occurrence, setting waivedAt and waivedByUserId", async () => {
+      const owner = await signupUser(ctx);
+      const h = await createHousehold(ctx, owner.cookie);
+      const bill = await createBill(h, owner.cookie, { name: "Test bill", frequency: "MONTHLY", firstDueDate: "2026-11-05", amountPaise: 100000 });
+      const [occurrence] = await listOccurrences(h, bill.id, owner.cookie);
+
+      const res = await waive(owner.cookie, h.id, bill.id, occurrence!.id, { reason: "Provider reversed the fee" });
+      expect(res.status).toBe(200);
+      expect(res.body.data.status).toBe("WAIVED");
+      expect(res.body.data.waivedAt).not.toBeNull();
+
+      const [row] = await ctx.db.select().from(billOccurrences).where(eq(billOccurrences.id, occurrence!.id));
+      expect(row!.status).toBe("WAIVED");
+      expect(row!.waivedByUserId).toBe(owner.id);
+
+      const [log] = await ctx.db.select().from(auditLogs).where(and(eq(auditLogs.householdId, h.id), eq(auditLogs.action, "bill.occurrenceWaived")));
+      expect(log).toMatchObject({ entityId: occurrence!.id, actorUserId: owner.id });
+    });
+
+    it("rejects waiving an occurrence that is PARTIALLY_PAID", async () => {
+      const owner = await signupUser(ctx);
+      const h = await createHousehold(ctx, owner.cookie);
+      const bill = await createBill(h, owner.cookie, { name: "Test bill", frequency: "MONTHLY", firstDueDate: "2026-11-05", amountPaise: 100000 });
+      const [occurrence] = await listOccurrences(h, bill.id, owner.cookie);
+      await recordPayment(owner.cookie, h.id, bill.id, occurrence!.id, { amountPaise: 1000, paidOn: "2026-11-01", method: "CASH" });
+
+      const res = await waive(owner.cookie, h.id, bill.id, occurrence!.id);
+      expect(res.status).toBe(400);
+    });
+
+    it("rejects waiving an occurrence that is PAID", async () => {
+      const owner = await signupUser(ctx);
+      const h = await createHousehold(ctx, owner.cookie);
+      const bill = await createBill(h, owner.cookie, { name: "Test bill", frequency: "MONTHLY", firstDueDate: "2026-11-05", amountPaise: 100000 });
+      const [occurrence] = await listOccurrences(h, bill.id, owner.cookie);
+      await recordPayment(owner.cookie, h.id, bill.id, occurrence!.id, { amountPaise: 100000, paidOn: "2026-11-01", method: "CASH" });
+
+      const res = await waive(owner.cookie, h.id, bill.id, occurrence!.id);
+      expect(res.status).toBe(400);
+    });
+
+    it("rejects waiving an already-WAIVED occurrence", async () => {
+      const owner = await signupUser(ctx);
+      const h = await createHousehold(ctx, owner.cookie);
+      const bill = await createBill(h, owner.cookie, { name: "Test bill", frequency: "MONTHLY", firstDueDate: "2026-11-05" });
+      const [occurrence] = await listOccurrences(h, bill.id, owner.cookie);
+      const first = await waive(owner.cookie, h.id, bill.id, occurrence!.id);
+      expect(first.status).toBe(200);
+
+      const second = await waive(owner.cookie, h.id, bill.id, occurrence!.id);
+      expect(second.status).toBe(400);
+    });
+
+    it("rejects unwaiving anything but a WAIVED occurrence (PENDING)", async () => {
+      const owner = await signupUser(ctx);
+      const h = await createHousehold(ctx, owner.cookie);
+      const bill = await createBill(h, owner.cookie, { name: "Test bill", frequency: "MONTHLY", firstDueDate: "2026-11-05" });
+      const [occurrence] = await listOccurrences(h, bill.id, owner.cookie);
+
+      const res = await unwaive(owner.cookie, h.id, bill.id, occurrence!.id);
+      expect(res.status).toBe(400);
+    });
+
+    it("rejects unwaiving a PARTIALLY_PAID occurrence", async () => {
+      const owner = await signupUser(ctx);
+      const h = await createHousehold(ctx, owner.cookie);
+      const bill = await createBill(h, owner.cookie, { name: "Test bill", frequency: "MONTHLY", firstDueDate: "2026-11-05", amountPaise: 100000 });
+      const [occurrence] = await listOccurrences(h, bill.id, owner.cookie);
+      await recordPayment(owner.cookie, h.id, bill.id, occurrence!.id, { amountPaise: 1000, paidOn: "2026-11-01", method: "CASH" });
+
+      const res = await unwaive(owner.cookie, h.id, bill.id, occurrence!.id);
+      expect(res.status).toBe(400);
+    });
+
+    it("a waive-then-unwaive round trip returns the occurrence to a clean PENDING state", async () => {
+      const owner = await signupUser(ctx);
+      const h = await createHousehold(ctx, owner.cookie);
+      const bill = await createBill(h, owner.cookie, { name: "Test bill", frequency: "MONTHLY", firstDueDate: "2026-11-05", amountPaise: 100000 });
+      const [occurrence] = await listOccurrences(h, bill.id, owner.cookie);
+
+      const waiveRes = await waive(owner.cookie, h.id, bill.id, occurrence!.id);
+      expect(waiveRes.status).toBe(200);
+
+      const unwaiveRes = await unwaive(owner.cookie, h.id, bill.id, occurrence!.id);
+      expect(unwaiveRes.status).toBe(200);
+      expect(unwaiveRes.body.data.status).toBe("PENDING");
+      expect(unwaiveRes.body.data.waivedAt).toBeNull();
+
+      const [row] = await ctx.db.select().from(billOccurrences).where(eq(billOccurrences.id, occurrence!.id));
+      expect(row!.status).toBe("PENDING");
+      expect(row!.waivedAt).toBeNull();
+      expect(row!.waivedByUserId).toBeNull();
+      expect(row!.amountPaidPaise).toBe(0);
+
+      // Back to a fully normal, payable occurrence after the round trip.
+      const paymentRes = await recordPayment(owner.cookie, h.id, bill.id, occurrence!.id, { amountPaise: 100000, paidOn: "2026-11-01", method: "CASH" });
+      expect(paymentRes.status).toBe(201);
+    });
+
+    it("404s waiving/unwaiving when the URL's bill id doesn't match the occurrence's actual bill", async () => {
+      const owner = await signupUser(ctx);
+      const h = await createHousehold(ctx, owner.cookie);
+      const billA = await createBill(h, owner.cookie, { name: "Bill A", frequency: "MONTHLY", firstDueDate: "2026-11-05" });
+      const billB = await createBill(h, owner.cookie, { name: "Bill B", frequency: "MONTHLY", firstDueDate: "2026-11-05" });
+      const [occurrenceA] = await listOccurrences(h, billA.id, owner.cookie);
+
+      const waiveRes = await waive(owner.cookie, h.id, billB.id, occurrenceA!.id);
+      expect(waiveRes.status).toBe(404);
+
+      const unwaiveRes = await unwaive(owner.cookie, h.id, billB.id, occurrenceA!.id);
+      expect(unwaiveRes.status).toBe(404);
+    });
+
+    it("404s waiving an occurrence scoped to another household", async () => {
+      const owner = await signupUser(ctx);
+      const h = await createHousehold(ctx, owner.cookie);
+      const bill = await createBill(h, owner.cookie, { name: "Test bill", frequency: "MONTHLY", firstDueDate: "2026-11-05" });
+      const [occurrence] = await listOccurrences(h, bill.id, owner.cookie);
+
+      const other = await signupUser(ctx);
+      const hOther = await createHousehold(ctx, other.cookie, "Other household");
+
+      const res = await waive(other.cookie, hOther.id, bill.id, occurrence!.id);
+      expect(res.status).toBe(404);
+    });
+
+    it("VIEWER cannot waive/unwaive (needs bills.manage), but ADMIN can", async () => {
+      const owner = await signupUser(ctx);
+      const h = await createHousehold(ctx, owner.cookie);
+      const bill = await createBill(h, owner.cookie, { name: "Test bill", frequency: "MONTHLY", firstDueDate: "2026-11-05" });
+      const [occurrence] = await listOccurrences(h, bill.id, owner.cookie);
+
+      const viewer = await signupUser(ctx);
+      await addMember(h.id, viewer.id, "VIEWER");
+      const admin = await signupUser(ctx);
+      await addMember(h.id, admin.id, "ADMIN");
+
+      const deniedWaive = await waive(viewer.cookie, h.id, bill.id, occurrence!.id);
+      expect(deniedWaive.status).toBe(403);
+
+      const allowedWaive = await waive(admin.cookie, h.id, bill.id, occurrence!.id);
+      expect(allowedWaive.status).toBe(200);
+
+      const deniedUnwaive = await unwaive(viewer.cookie, h.id, bill.id, occurrence!.id);
+      expect(deniedUnwaive.status).toBe(403);
+
+      const allowedUnwaive = await unwaive(admin.cookie, h.id, bill.id, occurrence!.id);
+      expect(allowedUnwaive.status).toBe(200);
+    });
+  });
 });
