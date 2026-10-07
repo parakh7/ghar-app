@@ -195,10 +195,17 @@ export async function ensureOccurrences(
  * cascade — including overriding an earlier manual correction — to every occurrence still open to
  * change: `PENDING`, nothing paid, not yet due. Locked (paid/partial/waived) and past-due
  * occurrences are untouched, same protection as everywhere else in this feature.
+ *
+ * No-op for a non-ACTIVE bill, same guard `ensureOccurrences` opens with — every other kind of edit
+ * on a PAUSED/ARCHIVED bill is deferred until it's resumed/unarchived (which already calls
+ * `ensureOccurrences` again), so an amount edit shouldn't be the one exception that rewrites
+ * existing rows immediately while the bill is otherwise frozen.
  */
 export async function applyAmountChange(
-  deps: Deps, actorUserId: string, membership: Membership, bill: { id: string; householdId: string }, amountDuePaise: number, ip?: string,
+  deps: Deps, actorUserId: string, membership: Membership, bill: { id: string; householdId: string; status: BillStatus }, amountDuePaise: number, ip?: string,
 ): Promise<void> {
+  if (bill.status !== "ACTIVE") return;
+
   const today = dateInZone(deps.clock.now(), membership.timezone);
   await deps.db.transaction(async (tx) => {
     const candidates = await tx.select().from(billOccurrences).where(and(

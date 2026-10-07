@@ -415,6 +415,66 @@ describe("bill occurrence generation and sync", () => {
       const [log] = await ctx.db.select().from(auditLogs).where(and(eq(auditLogs.householdId, h.id), eq(auditLogs.action, "bill.occurrenceAmountsRepriced")));
       expect(log).toMatchObject({ entityId: bill.id, actorUserId: owner.id, newValue: { amountDuePaise: 999999 } });
     });
+
+    /**
+     * NEW-1: `applyAmountChange` must trigger on the amount ACTUALLY changing, not merely on
+     * `amountPaise` being present in the patch body. A "save this form" client (the web edit form)
+     * resends every field on every save, including `amountPaise` unchanged — that must not
+     * retrigger the re-price and silently undo a manual per-occurrence correction.
+     */
+    it("renaming a bill while resending its unchanged amountPaise does not disturb a manually-corrected occurrence's amount", async () => {
+      const owner = await signupUser(ctx);
+      const h = await createHousehold(ctx, owner.cookie);
+      const bill = await createBill(h, owner.cookie, { name: "Test bill", frequency: "MONTHLY", firstDueDate: "2026-11-05", amountPaise: 100000 });
+      const [occurrence] = await listOccurrences(h, bill.id, owner.cookie);
+
+      await ctx.request.patch(`/api/households/${h.id}/bills/${bill.id}/occurrences/${occurrence!.id}`).set(csrf).set("cookie", owner.cookie)
+        .send({ amountDuePaise: 123456 });
+
+      // Resend the bill's entire form, including amountPaise at its EXISTING, unchanged value.
+      const res = await ctx.request.patch(`/api/households/${h.id}/bills/${bill.id}`).set(csrf).set("cookie", owner.cookie)
+        .send({ name: "Renamed bill", amountPaise: 100000 });
+      expect(res.status).toBe(200);
+
+      const after = await listOccurrences(h, bill.id, owner.cookie);
+      expect(after.find((o) => o.id === occurrence!.id)!.amountDuePaise).toBe(123456);
+
+      const repriceLogs = await ctx.db.select().from(auditLogs).where(and(eq(auditLogs.householdId, h.id), eq(auditLogs.action, "bill.occurrenceAmountsRepriced")));
+      expect(repriceLogs).toHaveLength(0);
+    });
+
+    /**
+     * NEW-2: `applyAmountChange` needs the same `status !== "ACTIVE"` guard `ensureOccurrences`
+     * already has — every other kind of edit on a paused bill is deferred until resume, and an
+     * amount edit shouldn't be the one exception that rewrites existing rows immediately.
+     *
+     * Design choice (left open by the fix request): rather than leaving a pending amount edit
+     * permanently stale after resume (the bare-minimum fix — just the guard, nothing else), both
+     * `resumeBill` and `unarchiveBill` also call `applyAmountChange` with the bill's current
+     * `amountPaise` right after `ensureOccurrences`, so resuming fully catches a bill up — schedule
+     * AND price — the same way a frequency edit made while paused already does.
+     */
+    it("an amount edit on a paused bill leaves existing occurrences untouched until the bill is resumed", async () => {
+      const owner = await signupUser(ctx);
+      const h = await createHousehold(ctx, owner.cookie);
+      const bill = await createBill(h, owner.cookie, { name: "Test bill", frequency: "MONTHLY", firstDueDate: "2026-11-05", amountPaise: 100000 });
+
+      await ctx.request.post(`/api/households/${h.id}/bills/${bill.id}/pause`).set(csrf).set("cookie", owner.cookie);
+      const res = await ctx.request.patch(`/api/households/${h.id}/bills/${bill.id}`).set(csrf).set("cookie", owner.cookie).send({ amountPaise: 999999 });
+      expect(res.status).toBe(200);
+
+      // While paused, existing occurrences still show the old amount — the amount edit is deferred,
+      // not applied immediately, exactly like a frequency/date edit already is while paused.
+      const whilePaused = await listOccurrences(h, bill.id, owner.cookie);
+      whilePaused.forEach((o) => expect(o.amountDuePaise).toBe(100000));
+
+      const resumeRes = await ctx.request.post(`/api/households/${h.id}/bills/${bill.id}/resume`).set(csrf).set("cookie", owner.cookie);
+      expect(resumeRes.status).toBe(200);
+
+      // Resuming catches the bill up to its current amount, same as it already does for schedule.
+      const afterResume = await listOccurrences(h, bill.id, owner.cookie);
+      afterResume.forEach((o) => expect(o.amountDuePaise).toBe(999999));
+    });
   });
 
   describe("updateOccurrenceAmount", () => {

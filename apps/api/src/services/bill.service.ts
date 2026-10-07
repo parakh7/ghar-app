@@ -79,9 +79,15 @@ export async function updateBill(deps: Deps, actorUserId: string, membership: Me
   // existing/future occurrences need resyncing to the new schedule.
   const configTouched = patch.frequency !== undefined || patch.intervalCount !== undefined || patch.intervalUnit !== undefined
     || patch.firstDueDate !== undefined || patch.endDate !== undefined;
+  // Captured from inside the transaction below — used after it to decide whether the amount
+  // ACTUALLY changed (not just whether the field was present in the request body; a client that
+  // always resends every field, like a plain "save this form" PATCH, would otherwise retrigger
+  // `applyAmountChange` on every edit, even one that never touched the amount).
+  let beforeAmountPaise: number | null = null;
   const row = await deps.db.transaction(async (tx) => {
     const [before] = await tx.select().from(bills).where(and(eq(bills.householdId, membership.householdId), eq(bills.id, billId))).for("update");
     if (!before) throw Errors.notFound("Bill");
+    beforeAmountPaise = before.amountPaise;
 
     // The schema's refine only catches endDate < firstDueDate when both arrive in the same patch;
     // this catches the case where only one of the pair is being changed against the other's stored value.
@@ -122,8 +128,13 @@ export async function updateBill(deps: Deps, actorUserId: string, membership: Me
   // A deliberate re-pricing (the household changed the bill's own amount) is handled separately from
   // `ensureOccurrences`'s schedule-resync — see `applyAmountChange`'s doc comment for why this
   // cascades (including overriding an earlier manual `updateOccurrenceAmount` correction) while a
-  // routine resync must never touch an existing row's amount at all.
-  if (patch.amountPaise !== undefined) await applyAmountChange(deps, actorUserId, membership, row, row.amountPaise ?? 0, ip);
+  // routine resync must never touch an existing row's amount at all. Gated on the amount having
+  // ACTUALLY changed vs. the stored value, not merely being present in the patch — a client that
+  // resends every field on every save (e.g. a "save this form" PATCH that always includes
+  // `amountPaise` even when only `name` changed) must not retrigger this.
+  if (patch.amountPaise !== undefined && patch.amountPaise !== beforeAmountPaise) {
+    await applyAmountChange(deps, actorUserId, membership, row, row.amountPaise ?? 0, ip);
+  }
   return toBillDTO(row);
 }
 
@@ -151,13 +162,20 @@ export async function pauseBill(deps: Deps, actorUserId: string, membership: Mem
   }, ip);
 }
 
-/** Resuming lands the bill back in ACTIVE — its schedule may have changed while paused (left untouched then), so resync now. */
+/**
+ * Resuming lands the bill back in ACTIVE — its schedule AND amount may have changed while paused
+ * (both deferred then, same guard as `applyAmountChange` itself), so resync both now: the schedule
+ * via `ensureOccurrences`, and the amount via `applyAmountChange` (using the bill's current
+ * `amountPaise`, whatever it ended up being after however many edits happened while paused) so a
+ * pending amount edit doesn't stay silently stale forever just because it landed while paused.
+ */
 export async function resumeBill(deps: Deps, actorUserId: string, membership: Membership, billId: string, ip?: string): Promise<void> {
   const row = await transitionBill(deps, actorUserId, membership, billId, {
     from: ["PAUSED"], set: { status: "ACTIVE" }, action: "bill.resumed",
     conflictMessage: "Only a paused bill can be resumed.",
   }, ip);
   await ensureOccurrences(deps, actorUserId, membership, row, false, ip);
+  await applyAmountChange(deps, actorUserId, membership, row, row.amountPaise ?? 0, ip);
 }
 
 export async function archiveBill(deps: Deps, actorUserId: string, membership: Membership, billId: string, ip?: string): Promise<void> {
@@ -174,4 +192,5 @@ export async function unarchiveBill(deps: Deps, actorUserId: string, membership:
     conflictMessage: "Only an archived bill can be restored.",
   }, ip);
   await ensureOccurrences(deps, actorUserId, membership, row, false, ip);
+  await applyAmountChange(deps, actorUserId, membership, row, row.amountPaise ?? 0, ip);
 }
