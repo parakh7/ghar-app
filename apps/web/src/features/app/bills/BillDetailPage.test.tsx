@@ -30,6 +30,11 @@ const ACTIVE_PAYMENT = {
   transactionRef: null, notes: null, voidedAt: null, voidReason: null, createdAt: "2026-10-05T00:00:00.000Z",
 };
 
+const VOIDED_PAYMENT = {
+  id: "p2", occurrenceId: "occ1", amountPaise: 50000, paidOn: "2026-10-03", method: "UPI" as const,
+  transactionRef: null, notes: null, voidedAt: "2026-10-04T00:00:00.000Z", voidReason: "Entered twice", createdAt: "2026-10-03T00:00:00.000Z",
+};
+
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 }
@@ -251,6 +256,39 @@ describe("BillDetailPage", () => {
       const unwaiveCall = fetchSpy.mock.calls.find(([u, i]) => String(u).endsWith("/occurrences/occ1/unwaive") && (i as RequestInit | undefined)?.method === "POST");
       expect(unwaiveCall).toBeDefined();
     });
+  });
+
+  it("shows a voided payment labeled as voided without hiding it, alongside an active payment with a Void button", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/households/h1")) return jsonResponse({ success: true, data: { ...HOUSEHOLD, permissions: ["bills.view", "payments.record"] }, message: null });
+      if (url.endsWith("/bill-categories")) return jsonResponse({ success: true, data: [], message: null });
+      if (url.endsWith("/bills/b1")) return jsonResponse({ success: true, data: ACTIVE_BILL, message: null });
+      if (init?.method === "POST" && url.endsWith("/bills/b1/occurrences/sync")) return jsonResponse({ success: true, data: [PENDING_OCCURRENCE], message: null });
+      if (init?.method === "GET" && url.endsWith("/occurrences/occ1/payments")) return jsonResponse({ success: true, data: [ACTIVE_PAYMENT, VOIDED_PAYMENT], message: null });
+      throw new Error(`unexpected fetch ${url}`);
+    }) as typeof fetch);
+    renderPage();
+    await screen.findByText("Electricity");
+    expect(await screen.findByText(/₹500 · UPI \(voided\)/)).toBeInTheDocument();
+    expect(screen.getByText(/₹1,500 · Cash$/)).toBeInTheDocument();
+    // Only the still-active payment gets a Void button — the voided one shows no action.
+    expect(screen.getAllByRole("button", { name: "Void" })).toHaveLength(1);
+  });
+
+  it("shows an error indicator when the per-occurrence payment history fails to load", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/households/h1")) return jsonResponse({ success: true, data: { ...HOUSEHOLD, permissions: ["bills.view", "payments.record"] }, message: null });
+      if (url.endsWith("/bill-categories")) return jsonResponse({ success: true, data: [], message: null });
+      if (url.endsWith("/bills/b1")) return jsonResponse({ success: true, data: ACTIVE_BILL, message: null });
+      if (init?.method === "POST" && url.endsWith("/bills/b1/occurrences/sync")) return jsonResponse({ success: true, data: [PENDING_OCCURRENCE], message: null });
+      if (init?.method === "GET" && url.endsWith("/occurrences/occ1/payments")) return jsonResponse({ success: false, error: { code: "INTERNAL_ERROR", message: "Boom" } }, 500);
+      throw new Error(`unexpected fetch ${url}`);
+    }) as typeof fetch);
+    renderPage();
+    await screen.findByText("Electricity");
+    expect(await screen.findByText(/Couldn't load payment history/)).toBeInTheDocument();
   });
 
   it("hides payment-record, void and waive actions for a viewer without payments.record/bills.manage", async () => {

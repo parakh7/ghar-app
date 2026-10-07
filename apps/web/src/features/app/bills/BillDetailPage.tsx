@@ -129,7 +129,7 @@ function OccurrenceRow({
     unwaive.mutate(occ.id, { onError: (err) => onError(err) });
   }
 
-  const activePayments = (paymentsQuery.data ?? []).filter((p) => !p.voidedAt);
+  const payments = paymentsQuery.data ?? [];
   const canRecordThisPayment = canRecordPayment && occ.status !== "WAIVED" && occ.amountPaidPaise < occ.amountDuePaise;
 
   return (
@@ -163,17 +163,23 @@ function OccurrenceRow({
         )
       )}
 
-      {activePayments.length > 0 && (
+      {paymentsQuery.isError && (
+        <div style={{ marginTop: "var(--space-2)" }}>
+          <Alert tone="error" title="Couldn't load payment history." />
+        </div>
+      )}
+
+      {payments.length > 0 && (
         <div className="list" style={{ marginTop: "var(--space-2)" }}>
-          {activePayments.map((p) => (
+          {payments.map((p) => (
             <div key={p.id} className="list__item">
               <span className="list__text">
                 <span className="list__label" style={{ display: "block" }}>
-                  {formatINR(p.amountPaise)} · {PAYMENT_METHODS.find((m) => m.value === p.method)?.label ?? p.method}
+                  {formatINR(p.amountPaise)} · {PAYMENT_METHODS.find((m) => m.value === p.method)?.label ?? p.method}{p.voidedAt && " (voided)"}
                 </span>
                 <span className="list__meta">{p.paidOn}{p.transactionRef && ` · ${p.transactionRef}`}{p.notes && ` · ${p.notes}`}</span>
               </span>
-              {canRecordPayment && (
+              {canRecordPayment && !p.voidedAt && (
                 <Button variant="ghost" loading={voidPayment.isPending} onClick={() => onVoidPayment(p.id)}>Void</Button>
               )}
             </div>
