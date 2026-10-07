@@ -448,13 +448,14 @@ describe("bill occurrence generation and sync", () => {
      * already has — every other kind of edit on a paused bill is deferred until resume, and an
      * amount edit shouldn't be the one exception that rewrites existing rows immediately.
      *
-     * Design choice (left open by the fix request): rather than leaving a pending amount edit
-     * permanently stale after resume (the bare-minimum fix — just the guard, nothing else), both
-     * `resumeBill` and `unarchiveBill` also call `applyAmountChange` with the bill's current
-     * `amountPaise` right after `ensureOccurrences`, so resuming fully catches a bill up — schedule
-     * AND price — the same way a frequency edit made while paused already does.
+     * Resume deliberately does NOT catch the amount up (it resyncs the schedule only):
+     * `applyAmountChange` can't tell "the bill was re-priced while paused" apart from "a human
+     * corrected this one occurrence by hand", so running it on every resume would wipe manual
+     * corrections on every pause→resume cycle. The accepted consequence, asserted below, is that
+     * existing occurrences keep their old amount after resume — the same deferral a frequency/date
+     * edit made while paused already gets.
      */
-    it("an amount edit on a paused bill leaves existing occurrences untouched until the bill is resumed", async () => {
+    it("an amount edit on a paused bill leaves existing occurrences untouched, and resume does not retroactively reprice them", async () => {
       const owner = await signupUser(ctx);
       const h = await createHousehold(ctx, owner.cookie);
       const bill = await createBill(h, owner.cookie, { name: "Test bill", frequency: "MONTHLY", firstDueDate: "2026-11-05", amountPaise: 100000 });
@@ -471,9 +472,49 @@ describe("bill occurrence generation and sync", () => {
       const resumeRes = await ctx.request.post(`/api/households/${h.id}/bills/${bill.id}/resume`).set(csrf).set("cookie", owner.cookie);
       expect(resumeRes.status).toBe(200);
 
-      // Resuming catches the bill up to its current amount, same as it already does for schedule.
+      // Resuming resyncs the SCHEDULE only — already-generated rows keep the amount they were
+      // created with. The deferred amount edit is not retroactively applied (see resumeBill's doc
+      // comment: doing so would wipe manual per-occurrence corrections on every pause→resume).
       const afterResume = await listOccurrences(h, bill.id, owner.cookie);
-      afterResume.forEach((o) => expect(o.amountDuePaise).toBe(999999));
+      afterResume.forEach((o) => expect(o.amountDuePaise).toBe(100000));
+    });
+
+    /**
+     * Regression guard for the data-loss bug that resume-time `applyAmountChange` caused: a manual
+     * per-occurrence correction must survive a pause→resume round trip with NO amount change at all
+     * in between. Covers the worst case too — a variable-amount bill (`amountPaise: null`, so the
+     * "bill's current amount" is 0) whose occurrences were all priced by hand.
+     */
+    it("a pause -> resume round trip with no amount change preserves manually-corrected occurrence amounts", async () => {
+      const owner = await signupUser(ctx);
+      const h = await createHousehold(ctx, owner.cookie);
+
+      const fixed = await createBill(h, owner.cookie, { name: "Fixed bill", frequency: "MONTHLY", firstDueDate: "2026-11-05", amountPaise: 100000 });
+      const [corrected] = await listOccurrences(h, fixed.id, owner.cookie);
+      await ctx.request.patch(`/api/households/${h.id}/bills/${fixed.id}/occurrences/${corrected!.id}`).set(csrf).set("cookie", owner.cookie)
+        .send({ amountDuePaise: 123456 });
+
+      // Variable-amount bill: no default amount at all, every occurrence priced by hand.
+      const variable = await createBill(h, owner.cookie, { name: "Electricity", frequency: "MONTHLY", firstDueDate: "2026-11-10", amountPaise: null });
+      const variableOccurrences = (await listOccurrences(h, variable.id, owner.cookie)).slice(0, 3);
+      const handPriced = [550000, 612300, 489900];
+      for (const [i, o] of variableOccurrences.entries()) {
+        await ctx.request.patch(`/api/households/${h.id}/bills/${variable.id}/occurrences/${o.id}`).set(csrf).set("cookie", owner.cookie)
+          .send({ amountDuePaise: handPriced[i] });
+      }
+
+      for (const id of [fixed.id, variable.id]) {
+        expect((await ctx.request.post(`/api/households/${h.id}/bills/${id}/pause`).set(csrf).set("cookie", owner.cookie)).status).toBe(200);
+        expect((await ctx.request.post(`/api/households/${h.id}/bills/${id}/resume`).set(csrf).set("cookie", owner.cookie)).status).toBe(200);
+      }
+
+      const fixedAfter = await listOccurrences(h, fixed.id, owner.cookie);
+      expect(fixedAfter.find((o) => o.id === corrected!.id)!.amountDuePaise).toBe(123456);
+
+      const variableAfter = await listOccurrences(h, variable.id, owner.cookie);
+      variableOccurrences.forEach((o, i) => {
+        expect(variableAfter.find((v) => v.id === o.id)!.amountDuePaise).toBe(handPriced[i]);
+      });
     });
   });
 

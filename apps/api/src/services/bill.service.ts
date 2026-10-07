@@ -163,11 +163,19 @@ export async function pauseBill(deps: Deps, actorUserId: string, membership: Mem
 }
 
 /**
- * Resuming lands the bill back in ACTIVE — its schedule AND amount may have changed while paused
- * (both deferred then, same guard as `applyAmountChange` itself), so resync both now: the schedule
- * via `ensureOccurrences`, and the amount via `applyAmountChange` (using the bill's current
- * `amountPaise`, whatever it ended up being after however many edits happened while paused) so a
- * pending amount edit doesn't stay silently stale forever just because it landed while paused.
+ * Resuming lands the bill back in ACTIVE — its schedule may have changed while paused (left
+ * untouched then), so resync now.
+ *
+ * Deliberately resyncs the SCHEDULE only. It must not also call `applyAmountChange`: that function's
+ * only test for "does this occurrence need re-pricing" is "does its stored amount differ from the
+ * bill's current amount", which cannot distinguish "the bill was re-priced while paused" from "a
+ * human deliberately corrected this one occurrence via `updateOccurrenceAmount`". Calling it here
+ * would make every pause→resume cycle silently wipe every manual per-occurrence correction, even
+ * when the bill's amount never changed at all (worst case: a variable-amount bill, `amountPaise`
+ * null, has all of its hand-entered amounts zeroed by a single round trip). The accepted
+ * consequence is the mirror of how a frequency/date edit made while paused behaves: an amount edit
+ * made while paused stays deferred, and existing occurrences keep their old amount after resume
+ * until the household edits the amount again (or the row is regenerated).
  */
 export async function resumeBill(deps: Deps, actorUserId: string, membership: Membership, billId: string, ip?: string): Promise<void> {
   const row = await transitionBill(deps, actorUserId, membership, billId, {
@@ -175,7 +183,6 @@ export async function resumeBill(deps: Deps, actorUserId: string, membership: Me
     conflictMessage: "Only a paused bill can be resumed.",
   }, ip);
   await ensureOccurrences(deps, actorUserId, membership, row, false, ip);
-  await applyAmountChange(deps, actorUserId, membership, row, row.amountPaise ?? 0, ip);
 }
 
 export async function archiveBill(deps: Deps, actorUserId: string, membership: Membership, billId: string, ip?: string): Promise<void> {
@@ -192,5 +199,4 @@ export async function unarchiveBill(deps: Deps, actorUserId: string, membership:
     conflictMessage: "Only an archived bill can be restored.",
   }, ip);
   await ensureOccurrences(deps, actorUserId, membership, row, false, ip);
-  await applyAmountChange(deps, actorUserId, membership, row, row.amountPaise ?? 0, ip);
 }
