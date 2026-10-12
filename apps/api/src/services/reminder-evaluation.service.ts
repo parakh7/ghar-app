@@ -4,8 +4,7 @@ import { daysBetween } from "@household/shared";
 import { househelps, reminderRules } from "../db/schema.js";
 import type { Deps } from "./deps.js";
 import { listDueOccurrencesForHousehold } from "./bill-occurrence.service.js";
-import type { Membership } from "./household.service.js";
-import { listSettlements } from "./salary-settlement.service.js";
+import { listSettlementsForHousehold } from "./salary-settlement.service.js";
 
 /**
  * These types are API-internal, not `@household/shared` exports: nothing outside `apps/api`
@@ -63,8 +62,11 @@ function effectiveRule(overrides: Map<string, ReminderRuleRow>, defaultRule: Rem
 
 /**
  * `matchedOffsets` = the subset of the rule's `offsetsDays` equal to `daysUntilDue` (empty when
- * nothing matches — offsets are always non-negative "days before due", so a negative `daysUntilDue`
- * naturally never matches any of them). `isOverdue` folds in the rule's own `overdueDaily` flag
+ * nothing matches). This function assumes `offsetsDays` only ever contains non-negative "days
+ * before due" values, but does not itself enforce that — there is no check constraint on the
+ * column, and a negative offset (if one somehow got written) WOULD match a `daysUntilDue` of the
+ * same negative value. Rejecting negative offsets at write time is Task 2's job (the `reminder_rules`
+ * CRUD validation), not this read-only evaluator's. `isOverdue` folds in the rule's own `overdueDaily` flag
  * (not just the raw `daysUntilDue < 0` fact) — a rule with `overdueDaily: false` means this item
  * never flags as overdue for reminder purposes, no matter how late it is.
  *
@@ -111,10 +113,10 @@ export async function getDueBillOccurrences(deps: Deps, householdId: string, tod
 
 /**
  * Every still-unpaid salary settlement in the household, evaluated against its effective SALARY
- * reminder rule. Reuses `listSettlements` (already household-wide) rather than a bespoke query —
- * it only ever reads `membership.householdId` off the `Membership` it's given when called with no
- * `househelpId` filter (as here), so a minimal stub membership is sufficient and avoids duplicating
- * `salary-settlement.service.ts`'s settlement-fetch/DTO-shaping logic.
+ * reminder rule. Reuses `listSettlementsForHousehold` (a bare-`householdId` sibling of
+ * `salary-settlement.service.ts`'s `listSettlements`, added for exactly this kind of internal/system
+ * caller) rather than a bespoke query, avoiding duplicating its settlement-fetch/DTO-shaping logic
+ * without having to fabricate a `Membership` this evaluator has no real one for.
  *
  * `reminder_rules.targetId` for `targetType = 'SALARY'` is a `househelps.id` — a settlement recurs
  * per househelp per month (a new row every period), so "override this specific settlement's
@@ -125,9 +127,8 @@ export async function getDueBillOccurrences(deps: Deps, householdId: string, tod
  * read together with the settlement-per-househelp-per-month shape, not left to guesswork.
  */
 export async function getDueSettlements(deps: Deps, householdId: string, today: ISODate): Promise<DueSettlement[]> {
-  const stubMembership: Membership = { householdId, role: "VIEWER", timezone: "UTC", name: "", overrides: null };
   const [allSettlements, { overrides, defaultRule }] = await Promise.all([
-    listSettlements(deps, stubMembership),
+    listSettlementsForHousehold(deps, householdId),
     loadRules(deps, householdId, "SALARY"),
   ]);
   const unpaid = allSettlements.filter((s) => s.status === "PENDING" || s.status === "PARTIALLY_PAID");

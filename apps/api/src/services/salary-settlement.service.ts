@@ -319,6 +319,20 @@ export async function listSettlements(
   return rows.map(toSettlementDTO);
 }
 
+/**
+ * Every settlement in a household, with no `Membership` required — for internal/system callers
+ * (Phase 7's `reminder-evaluation.service.ts`) that have a bare `householdId` and no authenticated
+ * session to derive a `Membership` from. Mirrors `member.service.ts`'s `listInvites(deps,
+ * householdId)` precedent: a real `Membership` carries a role/timezone/overrides that only make
+ * sense for a request-scoped, permission-checked caller, and fabricating one (e.g. a placeholder
+ * `role`/`timezone`) to satisfy `listSettlements`'s signature would be a silent lie that could
+ * later matter if that function ever starts reading those fields for real.
+ */
+export async function listSettlementsForHousehold(deps: Deps, householdId: string): Promise<SettlementDTO[]> {
+  const rows = await deps.db.select().from(salarySettlements).where(eq(salarySettlements.householdId, householdId)).orderBy(desc(salarySettlements.periodMonth));
+  return rows.map(toSettlementDTO);
+}
+
 export async function getSettlement(
   deps: Deps, membership: Membership, settlementId: string,
 ): Promise<SettlementDTO & { adjustments: AdjustmentDTO[]; payments: SalaryPaymentDTO[] }> {
