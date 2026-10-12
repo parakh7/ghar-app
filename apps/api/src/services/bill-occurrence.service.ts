@@ -340,6 +340,36 @@ export async function listOccurrences(
   return rows.map(toOccurrenceDTO);
 }
 
+export type DueOccurrenceRow = { occurrenceId: string; billId: string; billName: string; dueDate: string; amountDuePaise: number };
+
+/**
+ * Household-wide, cross-bill view of every still-open occurrence — for Phase 7's reminder
+ * evaluation (`reminder-evaluation.service.ts`), which needs to scan an entire household at once
+ * rather than one bill at a time the way `listOccurrences` does. Lives here rather than on the new
+ * service file because it's a natural extension of this file's existing occurrence-querying role
+ * (same tables, same status/active filtering concerns as `listOccurrences`/`ensureOccurrences`).
+ *
+ * "Open" = the bill itself is ACTIVE (a PAUSED/ARCHIVED bill's occurrences never warrant a
+ * reminder) and the occurrence is unpaid (`PENDING`/`PARTIALLY_PAID` — `PAID`/`WAIVED` are excluded
+ * outright, same statuses `listOccurrences` would let a caller filter down to). No date bound: the
+ * offset/overdue matching happens entirely in the caller against each item's effective reminder
+ * rule, and occurrences only ever exist up to `ensureOccurrences`'s rolling 12-month horizon anyway.
+ */
+export async function listDueOccurrencesForHousehold(deps: Deps, householdId: string): Promise<DueOccurrenceRow[]> {
+  const rows = await deps.db.select({
+    occurrenceId: billOccurrences.id, billId: billOccurrences.billId, billName: bills.name,
+    dueDate: billOccurrences.dueDate, amountDuePaise: billOccurrences.amountDuePaise,
+  }).from(billOccurrences)
+    .innerJoin(bills, and(eq(bills.householdId, billOccurrences.householdId), eq(bills.id, billOccurrences.billId)))
+    .where(and(
+      eq(billOccurrences.householdId, householdId),
+      eq(bills.status, "ACTIVE"),
+      inArray(billOccurrences.status, ["PENDING", "PARTIALLY_PAID"]),
+    ))
+    .orderBy(asc(billOccurrences.dueDate));
+  return rows;
+}
+
 /**
  * Scoped by `(householdId, billId, occurrenceId)` — the `billId` check exists purely so the URL's
  * `:id` segment can't lie about which bill it's touching (the occurrence is already unambiguous
