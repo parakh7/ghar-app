@@ -351,7 +351,7 @@ export const reminderTargetTypeSchema = z.enum(["BILL", "SALARY", "CHECKLIST", "
  * here, not silently deduped, so a client sending `[3, 3, 0]` gets a clear validation error instead
  * of a rule that quietly became `[3, 0]`.
  */
-const offsetsDaysSchema = z.array(z.number().int().nonnegative("Offsets must be 0 or greater."))
+const offsetsDaysSchema = z.array(z.number().int().nonnegative("Offsets must be 0 or greater.").max(365, "Offsets must be 365 days or less."))
   .min(1, "Give at least one offset.")
   .refine((arr) => new Set(arr).size === arr.length, "No duplicate offsets.");
 

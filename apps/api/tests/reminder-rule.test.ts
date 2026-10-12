@@ -174,6 +174,24 @@ describe("reminder rules", () => {
     expect(res.status).toBe(400);
   });
 
+  it("rejects an offsetsDays value over 365", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    const bill = await createBill(ctx, owner.cookie, h.id);
+    const res = await ctx.request.post(`/api/households/${h.id}/reminder-rules`).set(csrf).set("cookie", owner.cookie)
+      .send({ targetType: "BILL", targetId: bill.id, offsetsDays: [366] });
+    expect(res.status).toBe(400);
+  });
+
+  it("accepts an offsetsDays value of exactly 365", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    const bill = await createBill(ctx, owner.cookie, h.id);
+    const res = await ctx.request.post(`/api/households/${h.id}/reminder-rules`).set(csrf).set("cookie", owner.cookie)
+      .send({ targetType: "BILL", targetId: bill.id, offsetsDays: [365] });
+    expect(res.status).toBe(201);
+  });
+
   it("rejects a sendHour outside 0-23", async () => {
     const owner = await signupUser(ctx);
     const h = await createHousehold(ctx, owner.cookie);
