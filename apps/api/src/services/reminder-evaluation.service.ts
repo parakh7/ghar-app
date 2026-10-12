@@ -63,12 +63,13 @@ function effectiveRule(overrides: Map<string, ReminderRuleRow>, defaultRule: Rem
 /**
  * `matchedOffsets` = the subset of the rule's `offsetsDays` equal to `daysUntilDue` (empty when
  * nothing matches). This function assumes `offsetsDays` only ever contains non-negative "days
- * before due" values, but does not itself enforce that — there is no check constraint on the
- * column, and a negative offset (if one somehow got written) WOULD match a `daysUntilDue` of the
- * same negative value. Rejecting negative offsets at write time is Task 2's job (the `reminder_rules`
- * CRUD validation), not this read-only evaluator's. `isOverdue` folds in the rule's own `overdueDaily` flag
- * (not just the raw `daysUntilDue < 0` fact) — a rule with `overdueDaily: false` means this item
- * never flags as overdue for reminder purposes, no matter how late it is.
+ * before due" values, enforced by `offsetsDaysSchema` in `packages/shared/src/schemas.ts` (both
+ * on create and update). Note: there is no check constraint on the `offsets_days` column in the
+ * database, so the Zod schema is the only guard — a direct-DB-write path outside the API would
+ * bypass this. This evaluator does not re-validate offsets; it trusts the Zod enforcement at the
+ * API boundary. `isOverdue` folds in the rule's own `overdueDaily` flag (not just the raw
+ * `daysUntilDue < 0` fact) — a rule with `overdueDaily: false` means this item never flags as
+ * overdue for reminder purposes, no matter how late it is.
  *
  * An `isActive: false` rule suppresses both outcomes entirely, regardless of its stored
  * `offsetsDays`/`overdueDaily` values — same effect as no reminder being configured, but the item
