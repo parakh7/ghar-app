@@ -1,6 +1,6 @@
 import { Router } from "express";
 import type { OccurrenceStatus } from "@household/shared";
-import { billStatusSchema, createAdjustmentSchema, createBillCategorySchema, createBillSchema, createCategorySchema, createChecklistTaskSchema, createHousehelpSchema, createHouseholdSchema, dateSchema, generateSettlementSchema, inviteMemberSchema, markAttendanceSchema, markCompletionSchema, markHolidaySchema, monthSchema, moveCategorySchema, occurrenceStatusSchema, putAssignmentsSchema, recordBillPaymentSchema, recordPaymentSchema, updateBillCategorySchema, updateBillSchema, updateCategorySchema, updateChecklistTaskSchema, updateHousehelpSchema, updateHouseholdSchema, updateMemberSchema, updateOccurrenceAmountSchema, updateScheduleSchema, voidReasonSchema, waiveOccurrenceSchema } from "@household/shared";
+import { billStatusSchema, createAdjustmentSchema, createBillCategorySchema, createBillSchema, createCategorySchema, createChecklistTaskSchema, createHousehelpSchema, createHouseholdSchema, createReminderRuleSchema, dateSchema, generateSettlementSchema, inviteMemberSchema, markAttendanceSchema, markCompletionSchema, markHolidaySchema, monthSchema, moveCategorySchema, occurrenceStatusSchema, putAssignmentsSchema, recordBillPaymentSchema, recordPaymentSchema, updateBillCategorySchema, updateBillSchema, updateCategorySchema, updateChecklistTaskSchema, updateHousehelpSchema, updateHouseholdSchema, updateMemberSchema, updateOccurrenceAmountSchema, updateReminderRuleSchema, updateScheduleSchema, voidReasonSchema, waiveOccurrenceSchema } from "@household/shared";
 import { requireAuth } from "../middleware/auth.js";
 import { requireHousehold } from "../middleware/household.js";
 import { inviteLimiter } from "../middleware/rate-limit.js";
@@ -20,6 +20,7 @@ import * as checklistTasks from "../services/checklist-task.service.js";
 import * as households from "../services/household.service.js";
 import * as househelps from "../services/househelp.service.js";
 import * as members from "../services/member.service.js";
+import * as reminderRules from "../services/reminder-rule.service.js";
 import * as schedules from "../services/schedule.service.js";
 import * as salaryAdjustments from "../services/salary-adjustment.service.js";
 import * as salaryPayments from "../services/salary-payment.service.js";
@@ -423,6 +424,29 @@ export function householdRoutes(deps: Deps): Router {
   r.put("/:householdId/checklist-tasks/:id/assignments", requireHousehold(deps, "checklists.manage"), async (req, res) => {
     const { househelpIds } = parseBody(req, putAssignmentsSchema);
     ok(res, await checklistAssignments.putAssignments(deps, req.auth!.user.id, req.membership!, req.params.id as string, househelpIds, req.ip), 200, "Assignments updated.");
+  });
+
+  // Reminder rules are low-sensitivity config (when/whether a reminder fires, not any financial or
+  // personal data), visible to anyone who can see the household — "household.view" gates the list,
+  // not "reminders.view" (there is no such permission), deliberately looser than most .manage-gated
+  // resources' .view counterpart elsewhere in this file.
+  r.get("/:householdId/reminder-rules", requireHousehold(deps, "household.view"), async (req, res) => {
+    ok(res, await reminderRules.listReminderRules(deps, req.membership!));
+  });
+
+  r.post("/:householdId/reminder-rules", requireHousehold(deps, "reminders.manage"), async (req, res) => {
+    const input = parseBody(req, createReminderRuleSchema);
+    ok(res, await reminderRules.createReminderRule(deps, req.auth!.user.id, req.membership!, input, req.ip), 201, "Reminder rule added.");
+  });
+
+  r.patch("/:householdId/reminder-rules/:ruleId", requireHousehold(deps, "reminders.manage"), async (req, res) => {
+    const patch = parseBody(req, updateReminderRuleSchema);
+    ok(res, await reminderRules.updateReminderRule(deps, req.auth!.user.id, req.membership!, req.params.ruleId as string, patch, req.ip), 200, "Reminder rule updated.");
+  });
+
+  r.delete("/:householdId/reminder-rules/:ruleId", requireHousehold(deps, "reminders.manage"), async (req, res) => {
+    await reminderRules.deleteReminderRule(deps, req.auth!.user.id, req.membership!, req.params.ruleId as string, req.ip);
+    ok(res, null, 200, "Reminder rule removed.");
   });
 
   return r;

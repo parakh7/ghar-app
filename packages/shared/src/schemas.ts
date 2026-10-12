@@ -340,3 +340,36 @@ export const waiveOccurrenceSchema = z.object({
 
 export type RecordBillPaymentInput = z.infer<typeof recordBillPaymentSchema>;
 export type WaiveOccurrenceInput = z.infer<typeof waiveOccurrenceSchema>;
+
+export const reminderTargetTypeSchema = z.enum(["BILL", "SALARY", "CHECKLIST", "ATTENDANCE"]);
+
+/**
+ * Non-empty, every offset a non-negative "days before due" count, and no duplicates — Task 1's
+ * evaluator (`reminder-evaluation.service.ts`) assumes both the non-negativity and the uniqueness
+ * but enforces neither (a negative offset would silently "match" a same-sign `daysUntilDue`, and a
+ * duplicate would silently produce a duplicate entry in `matchedOffsets`). Duplicates are REJECTED
+ * here, not silently deduped, so a client sending `[3, 3, 0]` gets a clear validation error instead
+ * of a rule that quietly became `[3, 0]`.
+ */
+const offsetsDaysSchema = z.array(z.number().int().nonnegative("Offsets must be 0 or greater."))
+  .min(1, "Give at least one offset.")
+  .refine((arr) => new Set(arr).size === arr.length, "No duplicate offsets.");
+
+export const createReminderRuleSchema = z.object({
+  targetType: reminderTargetTypeSchema,
+  targetId: z.string().uuid().optional(),
+  offsetsDays: offsetsDaysSchema,
+  overdueDaily: z.boolean().default(true),
+  sendHour: z.number().int().min(0).max(23).default(9),
+  isActive: z.boolean().default(true),
+});
+
+export const updateReminderRuleSchema = z.object({
+  offsetsDays: offsetsDaysSchema.optional(),
+  overdueDaily: z.boolean().optional(),
+  sendHour: z.number().int().min(0).max(23).optional(),
+  isActive: z.boolean().optional(),
+}).refine((v) => Object.values(v).some((x) => x !== undefined), { message: "Provide at least one field to update." });
+
+export type CreateReminderRuleInput = z.infer<typeof createReminderRuleSchema>;
+export type UpdateReminderRuleInput = z.infer<typeof updateReminderRuleSchema>;

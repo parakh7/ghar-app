@@ -28,6 +28,7 @@ export const PERMISSIONS = [
   "bills.manage",
   "payments.record",       // record bill payment
   "reports.view",
+  "reminders.manage",      // create/edit/delete reminder rules
   "audit.view",
 ] as const;
 export type Permission = (typeof PERMISSIONS)[number];

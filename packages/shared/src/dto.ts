@@ -107,3 +107,10 @@ export type BillPaymentDTO = {
   id: string; occurrenceId: string; amountPaise: number; paidOn: string; method: PaymentMethod;
   transactionRef: string | null; notes: string | null; voidedAt: string | null; voidReason: string | null; createdAt: string;
 };
+
+export type ReminderTargetType = "BILL" | "SALARY" | "CHECKLIST" | "ATTENDANCE";
+
+export type ReminderRuleDTO = {
+  id: string; targetType: ReminderTargetType; targetId: string | null;
+  offsetsDays: number[]; overdueDaily: boolean; sendHour: number; isActive: boolean; createdAt: string;
+};
