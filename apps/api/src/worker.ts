@@ -1,6 +1,7 @@
 import { loadEnv } from "./config/env.js";
 import { createDb, createPool } from "./db/client.js";
 import { runHeartbeat } from "./jobs/heartbeat.job.js";
+import { runEvaluateReminders } from "./jobs/evaluate-reminders.job.js";
 import { systemClock } from "./lib/clock.js";
 import { createLogger } from "./lib/logger.js";
 import { BullMQQueue } from "./lib/queue.js";
@@ -23,6 +24,7 @@ const queue = new BullMQQueue(env, logger, { consume: true });
 const deps: Deps = { env, db, logger, clock: systemClock, email, queue };
 
 deps.queue.registerHandler("heartbeat", () => runHeartbeat(deps));
+deps.queue.registerHandler("evaluate-reminders", () => runEvaluateReminders(deps));
 
 process.on("unhandledRejection", (reason) => logger.error({ err: reason }, "unhandled promise rejection"));
 
@@ -42,5 +44,6 @@ process.on("SIGINT", () => void shutdown("SIGINT"));
 // and retries indefinitely, so this await can hang — the signal handlers must already be live
 // so graceful shutdown still works while waiting on it.
 await deps.queue.scheduleRepeating("heartbeat", {}, 60_000);
+await deps.queue.scheduleRepeating("evaluate-reminders", {}, 60 * 60 * 1000);
 
 logger.info({ env: env.NODE_ENV }, "worker listening for jobs");
