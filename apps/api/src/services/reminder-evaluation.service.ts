@@ -21,6 +21,7 @@ export type DueBillOccurrence = {
   daysUntilDue: number;
   matchedOffsets: number[];
   isOverdue: boolean;
+  sendHour: number;
 };
 
 export type DueSettlement = {
@@ -32,6 +33,7 @@ export type DueSettlement = {
   daysUntilDue: number;
   matchedOffsets: number[];
   isOverdue: boolean;
+  sendHour: number;
 };
 
 type ReminderRuleRow = typeof reminderRules.$inferSelect;
@@ -106,7 +108,7 @@ export async function getDueBillOccurrences(deps: Deps, householdId: string, tod
     const { matchedOffsets, isOverdue } = evaluateRule(rule, daysUntilDue);
     result.push({
       billId: occ.billId, billName: occ.billName, occurrenceId: occ.occurrenceId, dueDate: occ.dueDate,
-      amountDuePaise: occ.amountDuePaise, daysUntilDue, matchedOffsets, isOverdue,
+      amountDuePaise: occ.amountDuePaise, daysUntilDue, matchedOffsets, isOverdue, sendHour: rule.sendHour,
     });
   }
   return result;
@@ -148,7 +150,7 @@ export async function getDueSettlements(deps: Deps, householdId: string, today: 
     const { matchedOffsets, isOverdue } = evaluateRule(rule, daysUntilDue);
     result.push({
       settlementId: s.id, househelpId: s.househelpId, househelpName: nameById.get(s.househelpId) ?? "",
-      dueDate: s.dueDate, netPayablePaise: s.netPayablePaise, daysUntilDue, matchedOffsets, isOverdue,
+      dueDate: s.dueDate, netPayablePaise: s.netPayablePaise, daysUntilDue, matchedOffsets, isOverdue, sendHour: rule.sendHour,
     });
   }
   return result;

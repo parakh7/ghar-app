@@ -65,6 +65,16 @@ describe("reminder evaluation", () => {
       expect(item).toMatchObject({ billId: bill.id, daysUntilDue: 7, matchedOffsets: [7], isOverdue: false });
     });
 
+    it("exposes the effective rule's sendHour for the job's send-hour gating", async () => {
+      const owner = await signupUser(ctx);
+      const h = await createHousehold(ctx, owner.cookie);
+      const { occurrence } = await createBill(h, owner.cookie, addDays(TODAY, 7));
+
+      const due = await getDueBillOccurrences(ctx.deps, h.id, TODAY);
+      const item = due.find((d) => d.occurrenceId === occurrence.id)!;
+      expect(item.sendHour).toBe(9); // DEFAULT_REMINDERS.BILL.sendHour
+    });
+
     it("flags an overdue item when the rule's overdueDaily is true (the default)", async () => {
       const owner = await signupUser(ctx);
       const h = await createHousehold(ctx, owner.cookie);
@@ -173,6 +183,17 @@ describe("reminder evaluation", () => {
       const due = await getDueSettlements(ctx.deps, h.id, TODAY);
       const item = due.find((d) => d.settlementId === settlement.id)!;
       expect(item).toMatchObject({ househelpId: help.id, househelpName: "Sunita", daysUntilDue: 3, matchedOffsets: [3], isOverdue: false });
+    });
+
+    it("exposes the effective rule's sendHour for the job's send-hour gating", async () => {
+      const owner = await signupUser(ctx);
+      const h = await createHousehold(ctx, owner.cookie);
+      const help = await createHousehelp(h.id);
+      const settlement = await createSettlement(h.id, help.id, addDays(TODAY, 3));
+
+      const due = await getDueSettlements(ctx.deps, h.id, TODAY);
+      const item = due.find((d) => d.settlementId === settlement.id)!;
+      expect(item.sendHour).toBe(9); // DEFAULT_REMINDERS.SALARY.sendHour
     });
 
     it("flags an overdue settlement when the rule's overdueDaily is true (the default)", async () => {
