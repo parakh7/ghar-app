@@ -4,9 +4,22 @@ import { households, householdMembers, notifications, notificationDeliveries, no
 import type { Deps } from "../services/deps.js";
 import { getDueBillOccurrences, getDueSettlements, type DueBillOccurrence, type DueSettlement } from "../services/reminder-evaluation.service.js";
 
-function isUniqueViolation(err: unknown): boolean {
-  const e = err as { code?: string; cause?: { code?: string } };
-  return e?.code === "23505" || e?.cause?.code === "23505";
+/**
+ * True only for a unique-violation on `notifications_idempotency_uq` specifically — the one
+ * constraint a re-run of this job is expected to hit (same item, same hour, already notified).
+ * Any other 23505 (e.g. `notification_deliveries_uq`, which a caller-supplied duplicate channel
+ * in `channels` would trip) must NOT be swallowed here: that would roll back the whole transaction
+ * (notification + every delivery) while this catch reports it as a harmless no-op, silently
+ * dropping a reminder with no notification, no deliveries, and no error. Node-postgres errors
+ * raised inside `deps.db.transaction` come back wrapped by drizzle as `DrizzleQueryError`, with the
+ * real `pg` error (carrying `code`/`constraint`) on `.cause` — but check both shapes defensively in
+ * case that wrapping ever changes.
+ */
+function isIdempotencyKeyViolation(err: unknown): boolean {
+  const e = err as { code?: string; constraint?: string; cause?: { code?: string; constraint?: string } };
+  const code = e?.code ?? e?.cause?.code;
+  const constraint = e?.constraint ?? e?.cause?.constraint;
+  return code === "23505" && constraint === "notifications_idempotency_uq";
 }
 
 type NotificationChannelValue = "IN_APP" | "WEB_PUSH" | "EMAIL" | "SMS" | "WHATSAPP";
@@ -101,7 +114,7 @@ async function createNotification(deps: Deps, input: NotificationInput): Promise
       }
     });
   } catch (err) {
-    if (!isUniqueViolation(err)) throw err;
+    if (!isIdempotencyKeyViolation(err)) throw err;
   }
 }
 
@@ -116,44 +129,53 @@ export async function runEvaluateReminders(deps: Deps): Promise<void> {
     .from(households).where(isNull(households.archivedAt));
 
   for (const household of allHouseholds) {
-    const today = dateInZone(now, household.timezone);
-    const hour = hourInZone(now, household.timezone);
+    try {
+      const today = dateInZone(now, household.timezone);
+      const hour = hourInZone(now, household.timezone);
 
-    const [dueBills, dueSettlements] = await Promise.all([
-      getDueBillOccurrences(deps, household.id, today),
-      getDueSettlements(deps, household.id, today),
-    ]);
+      const [dueBills, dueSettlements] = await Promise.all([
+        getDueBillOccurrences(deps, household.id, today),
+        getDueSettlements(deps, household.id, today),
+      ]);
 
-    for (const item of dueBills) {
-      const outcome = outcomeFor(item);
-      if (!outcome || item.sendHour !== hour) continue;
-      const { title, body } = billContent(item, outcome);
-      const recipients = await getRecipients(deps, household.id, "BILL");
-      for (const recipient of recipients) {
-        await createNotification(deps, {
-          householdId: household.id, userId: recipient.userId, category: "BILL", severity: severityFor(outcome),
-          title, body, entityType: "bill_occurrence", entityId: item.occurrenceId,
-          data: { amountDuePaise: item.amountDuePaise, dueDate: item.dueDate },
-          idempotencyKey: idempotencyKey("bill_occ", item.occurrenceId, outcome, today, recipient.userId),
-          channels: recipient.channels, now,
-        });
+      for (const item of dueBills) {
+        const outcome = outcomeFor(item);
+        if (!outcome || item.sendHour !== hour) continue;
+        const { title, body } = billContent(item, outcome);
+        const recipients = await getRecipients(deps, household.id, "BILL");
+        for (const recipient of recipients) {
+          await createNotification(deps, {
+            householdId: household.id, userId: recipient.userId, category: "BILL", severity: severityFor(outcome),
+            title, body, entityType: "bill_occurrence", entityId: item.occurrenceId,
+            data: { amountDuePaise: item.amountDuePaise, dueDate: item.dueDate },
+            idempotencyKey: idempotencyKey("bill_occ", item.occurrenceId, outcome, today, recipient.userId),
+            channels: recipient.channels, now,
+          });
+        }
       }
-    }
 
-    for (const item of dueSettlements) {
-      const outcome = outcomeFor(item);
-      if (!outcome || item.sendHour !== hour) continue;
-      const { title, body } = settlementContent(item, outcome);
-      const recipients = await getRecipients(deps, household.id, "SALARY");
-      for (const recipient of recipients) {
-        await createNotification(deps, {
-          householdId: household.id, userId: recipient.userId, category: "SALARY", severity: severityFor(outcome),
-          title, body, entityType: "salary_settlement", entityId: item.settlementId,
-          data: { netPayablePaise: item.netPayablePaise, dueDate: item.dueDate },
-          idempotencyKey: idempotencyKey("settlement", item.settlementId, outcome, today, recipient.userId),
-          channels: recipient.channels, now,
-        });
+      for (const item of dueSettlements) {
+        const outcome = outcomeFor(item);
+        if (!outcome || item.sendHour !== hour) continue;
+        const { title, body } = settlementContent(item, outcome);
+        const recipients = await getRecipients(deps, household.id, "SALARY");
+        for (const recipient of recipients) {
+          await createNotification(deps, {
+            householdId: household.id, userId: recipient.userId, category: "SALARY", severity: severityFor(outcome),
+            title, body, entityType: "salary_settlement", entityId: item.settlementId,
+            data: { netPayablePaise: item.netPayablePaise, dueDate: item.dueDate },
+            idempotencyKey: idempotencyKey("settlement", item.settlementId, outcome, today, recipient.userId),
+            channels: recipient.channels, now,
+          });
+        }
       }
+    } catch (err) {
+      // One household's failure (a query blip, an unexpected data shape) must not abort every
+      // household processed after it in this hourly tick — log and move on. A matched-offset
+      // reminder is non-repeating (the offset won't match again on a retry an hour later), so an
+      // uncaught error here could permanently drop it for that occurrence; a daily-overdue item
+      // tries again tomorrow regardless.
+      deps.logger.error({ err, householdId: household.id }, "evaluate-reminders failed for household");
     }
   }
 }

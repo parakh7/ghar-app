@@ -1,7 +1,7 @@
-import { eq } from "drizzle-orm";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { and, eq } from "drizzle-orm";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { addDays } from "@household/shared";
-import { householdMembers, notifications, notificationDeliveries, notificationPreferences, househelps, salarySettlements } from "../src/db/schema.js";
+import { households, householdMembers, notifications, notificationDeliveries, notificationPreferences, househelps, salarySettlements } from "../src/db/schema.js";
 import { runEvaluateReminders } from "../src/jobs/evaluate-reminders.job.js";
 import { createTestContext, csrf, signupUser, truncateAll, type TestContext } from "./helpers.js";
 
@@ -161,5 +161,46 @@ describe("runEvaluateReminders", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ category: "SALARY", userId: owner.id });
     expect(rows[0]!.idempotencyKey).toMatch(/^settlement:.+:before:3:user:/);
+  });
+
+  it("fails loudly (not silently) when a preference's duplicate channel violates notification_deliveries_uq", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    // Household creation seeds the owner a BILL preference row already; corrupt its channels with
+    // a duplicate so the per-channel delivery insert trips `notification_deliveries_uq`.
+    await ctx.db.update(notificationPreferences).set({ channels: ["IN_APP", "IN_APP"] })
+      .where(and(eq(notificationPreferences.householdId, h.id), eq(notificationPreferences.userId, owner.id), eq(notificationPreferences.category, "BILL")));
+    await createBill(h, owner.cookie, addDays(TODAY, 7));
+
+    const errorSpy = vi.spyOn(ctx.deps.logger, "error").mockImplementation(() => undefined as never);
+    await runEvaluateReminders(ctx.deps);
+
+    // The notification+deliveries transaction genuinely rolled back (not a false "already exists"
+    // no-op) — so zero rows is correct here, but it must have been reported as a real failure.
+    const rows = await ctx.db.select().from(notifications).where(eq(notifications.householdId, h.id));
+    expect(rows).toHaveLength(0);
+    expect(errorSpy).toHaveBeenCalledWith(expect.objectContaining({ householdId: h.id }), expect.any(String));
+    errorSpy.mockRestore();
+  });
+
+  it("isolates a household that throws, letting a healthy household still get notified", async () => {
+    const ownerBad = await signupUser(ctx);
+    const hBad = await createHousehold(ctx, ownerBad.cookie, "Bad Household");
+    await createBill(hBad, ownerBad.cookie, addDays(TODAY, 7));
+    await ctx.db.update(households).set({ timezone: "Not/AZone" }).where(eq(households.id, hBad.id));
+
+    const ownerGood = await signupUser(ctx);
+    const hGood = await createHousehold(ctx, ownerGood.cookie, "Good Household");
+    await createBill(hGood, ownerGood.cookie, addDays(TODAY, 7));
+
+    const errorSpy = vi.spyOn(ctx.deps.logger, "error").mockImplementation(() => undefined as never);
+    await expect(runEvaluateReminders(ctx.deps)).resolves.toBeUndefined();
+
+    const rowsGood = await ctx.db.select().from(notifications).where(eq(notifications.householdId, hGood.id));
+    expect(rowsGood).toHaveLength(1);
+    const rowsBad = await ctx.db.select().from(notifications).where(eq(notifications.householdId, hBad.id));
+    expect(rowsBad).toHaveLength(0);
+    expect(errorSpy).toHaveBeenCalledWith(expect.objectContaining({ householdId: hBad.id }), expect.any(String));
+    errorSpy.mockRestore();
   });
 });
