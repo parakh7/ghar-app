@@ -25,6 +25,7 @@ import { ScheduleEditorPage } from "./features/app/househelps/ScheduleEditorPage
 import { AcceptInvitePage } from "./features/app/members/AcceptInvitePage";
 import { MembersPage } from "./features/app/members/MembersPage";
 import { MorePage } from "./features/app/MorePage";
+import { NotificationsPage } from "./features/notifications/NotificationsPage";
 import { OnboardingPage } from "./features/app/OnboardingPage";
 import { SalaryListPage } from "./features/app/salary/SalaryListPage";
 import { SettlementDetailPage } from "./features/app/salary/SettlementDetailPage";
@@ -63,6 +64,7 @@ export function App() {
         <Route path="bills/:id" element={<BillDetailPage />} />
         <Route path="bills/:id/edit" element={<BillFormPage mode="edit" />} />
         <Route path="members" element={<MembersPage />} />
+        <Route path="notifications" element={<NotificationsPage />} />
         <Route path="more" element={<MorePage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
