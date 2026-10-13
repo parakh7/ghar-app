@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { AttendanceRecordDTO, MarkAttendanceInput, MarkHolidayResultDTO, TodayAttendanceDTO } from "@household/shared";
+import type { AttendanceRecordDTO, MarkAttendanceInput, MarkHolidayResultDTO, MarkRemainingPresentResultDTO, TodayAttendanceDTO } from "@household/shared";
 import { del, get, post, put } from "../../../lib/api";
 
 export function useTodayAttendance(householdId: string | undefined) {
@@ -40,6 +40,15 @@ export function useMarkHoliday(householdId: string) {
   return useMutation({
     mutationFn: (date: string) => post<MarkHolidayResultDTO>(`/households/${householdId}/attendance/holiday`, { date }),
     onSuccess: () => invalidateAttendance(qc, householdId),
+  });
+}
+
+export function useMarkRemainingPresent(householdId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ househelpId, month }: { househelpId: string; month: string }) =>
+      post<MarkRemainingPresentResultDTO>(`/households/${householdId}/househelps/${househelpId}/attendance/remaining-present`, { month }),
+    onSuccess: (_data, { househelpId }) => invalidateAttendance(qc, householdId, househelpId),
   });
 }
 

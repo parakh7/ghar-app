@@ -24,6 +24,7 @@ function renderPage(permissions: string[]) {
     if (init?.method === "PUT" && url.includes("/attendance/hh1")) return jsonResponse({ success: true, data: { date: "2026-09-15", status: "ABSENT", note: null }, message: null });
     if (url.includes("/attendance?month=2026-09")) return jsonResponse({ success: true, data: [{ date: "2026-09-15", status: "PRESENT", note: null }] });
     if (/\/attendance\?month=\d{4}-\d{2}$/.test(url)) return jsonResponse({ success: true, data: [] });
+    if (init?.method === "POST" && url.includes("/attendance/remaining-present")) return jsonResponse({ success: true, data: { month: "2026-09", count: 20 }, message: null });
     throw new Error(`unexpected fetch ${url}`);
   }) as typeof fetch);
   return render(
@@ -97,5 +98,23 @@ describe("HousehelpCalendarPage", () => {
     // yet, so the rate is unknown rather than a misleading 0%.
     await userEvent.click(screen.getByRole("button", { name: "Next" }));
     await screen.findByText("— attendance");
+  });
+
+  it("confirms and posts to the bulk endpoint when 'Mark remaining as present' is clicked", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderPage(["attendance.view", "attendance.mark", "attendance.editHistory"]);
+    const button = await screen.findByRole("button", { name: "Mark 20 remaining as present" });
+    await userEvent.click(button);
+    expect(window.confirm).toHaveBeenCalledWith("Mark 20 remaining day(s) as present?");
+    const postCall = fetchSpy.mock.calls.find(([u, init]) => String(u).includes("/attendance/remaining-present") && (init as RequestInit | undefined)?.method === "POST");
+    expect(postCall).toBeDefined();
+    expect(JSON.parse((postCall![1] as RequestInit).body as string)).toEqual({ month: "2026-09" });
+  });
+
+  it("hides the mark-remaining button without attendance.editHistory", async () => {
+    renderPage(["attendance.view", "attendance.mark"]);
+    await screen.findByText("Sunita's attendance");
+    expect(screen.queryByRole("button", { name: /Mark \d+ remaining as present/ })).not.toBeInTheDocument();
   });
 });

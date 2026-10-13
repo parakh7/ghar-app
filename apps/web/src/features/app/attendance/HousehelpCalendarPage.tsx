@@ -12,7 +12,7 @@ import { useHousehelp, useSchedule } from "../househelps/useHousehelps";
 import { AttendancePicker } from "./AttendancePicker";
 import { summarizeMonth } from "./summarize";
 import { toneOf } from "./statusTone";
-import { useClearAttendance, useMonthAttendance, useSetAttendance } from "./useAttendance";
+import { useClearAttendance, useMarkRemainingPresent, useMonthAttendance, useSetAttendance } from "./useAttendance";
 
 function messageFrom(err: unknown): string {
   return err instanceof ApiError ? err.message : "Something went wrong. Please try again.";
@@ -55,6 +55,7 @@ export function HousehelpCalendarPage() {
   const monthQuery = useMonthAttendance(householdId, id, month);
   const setAttendance = useSetAttendance(householdId ?? "");
   const clearAttendance = useClearAttendance(householdId ?? "");
+  const markRemaining = useMarkRemainingPresent(householdId ?? "");
   const canEditHistory = householdQuery.data?.permissions.includes("attendance.editHistory") ?? false;
   const canMarkToday = householdQuery.data?.permissions.includes("attendance.mark") ?? false;
   const [openDate, setOpenDate] = useState<string | null>(null);
@@ -83,6 +84,11 @@ export function HousehelpCalendarPage() {
     else setAttendance.mutate({ househelpId: id!, body: { date: d, status } }, { onError: (err) => setPageError(messageFrom(err)) });
   }
 
+  function onMarkRemaining() {
+    if (!window.confirm(`Mark ${summary.notYetMarked} remaining day(s) as present?`)) return;
+    markRemaining.mutate({ househelpId: id!, month }, { onError: (err) => setPageError(messageFrom(err)) });
+  }
+
   return (
     <>
       <header className="page-head"><h1 className="page-title">{househelpQuery.data.name}'s attendance</h1></header>
@@ -107,6 +113,14 @@ export function HousehelpCalendarPage() {
         <strong>{monthLabel(month)}</strong>
         <Button variant="ghost" icon={<ChevronRight size={20} aria-hidden />} onClick={() => setMonth(shiftMonth(month, 1))}>Next</Button>
       </div>
+
+      {canMarkToday && canEditHistory && summary.notYetMarked > 0 && (
+        <div style={{ marginBottom: "var(--space-4)" }}>
+          <Button variant="secondary" loading={markRemaining.isPending} onClick={onMarkRemaining}>
+            Mark {summary.notYetMarked} remaining as present
+          </Button>
+        </div>
+      )}
 
       <div className="cal__grid">
         {Array.from({ length: lead }).map((_, i) => <div key={`lead-${i}`} />)}
