@@ -30,5 +30,6 @@ describe("MorePage", () => {
     renderPage(5);
     await screen.findByText("Notifications");
     expect(await screen.findByLabelText("5 unread notifications")).toBeInTheDocument();
+    await screen.findByText("Notification settings");
   });
 });

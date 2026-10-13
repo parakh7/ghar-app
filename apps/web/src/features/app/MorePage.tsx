@@ -58,6 +58,9 @@ export function MorePage() {
           <span className="list__label">Notifications</span>
           <NotificationBadge count={unreadCount} />
         </Link>
+        <Link to="/settings/notifications" className="list__item">
+          <span className="list__label">Notification settings</span>
+        </Link>
       </div>
 
       <h2 className="section-title">Account</h2>
