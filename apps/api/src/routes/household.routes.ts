@@ -27,6 +27,7 @@ import * as schedules from "../services/schedule.service.js";
 import * as salaryAdjustments from "../services/salary-adjustment.service.js";
 import * as salaryPayments from "../services/salary-payment.service.js";
 import * as salarySettlements from "../services/salary-settlement.service.js";
+import * as searchService from "../services/search.service.js";
 import * as today from "../services/today.service.js";
 
 /**
@@ -481,6 +482,11 @@ export function householdRoutes(deps: Deps): Router {
 
   r.get("/:householdId/today", requireHousehold(deps, "household.view"), async (req, res) => {
     ok(res, await today.getTodayDashboard(deps, req.membership!));
+  });
+
+  r.get("/:householdId/search", requireHousehold(deps, "household.view"), async (req, res) => {
+    const q = typeof req.query.q === "string" ? req.query.q : "";
+    ok(res, await searchService.search(deps, req.membership!, q));
   });
 
   return r;

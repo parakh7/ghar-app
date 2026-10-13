@@ -108,7 +108,9 @@ async function createChecklistTask(householdId: string, name: string) {
 }
 
 async function addMember(householdId: string, userId: string, overrides: Record<string, unknown> = {}) {
-  await ctx.db.insert(householdMembers).values({ householdId, userId, role: "MEMBER", status: "ACTIVE", ...overrides });
+  // listMembers()'s toMemberDTO non-null-asserts joinedAt (real ACTIVE rows always have it stamped
+  // via the invite/add flow) — must set it here too, or any route touching listMembers 500s.
+  await ctx.db.insert(householdMembers).values({ householdId, userId, role: "MEMBER", status: "ACTIVE", joinedAt: ctx.clock.now(), ...overrides });
 }
 
 async function search(h: { id: string }, cookie: string, q: string) {

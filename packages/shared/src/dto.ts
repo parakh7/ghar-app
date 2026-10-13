@@ -148,3 +148,15 @@ export type TodayDashboardDTO = {
   bills?: TodayBillDTO[];
   salary?: TodaySalarySectionDTO;
 };
+
+export type SearchHousehelpResultDTO = { id: string; name: string };
+export type SearchBillResultDTO = { id: string; name: string; provider: string | null };
+export type SearchChecklistTaskResultDTO = { id: string; name: string };
+export type SearchMemberResultDTO = { userId: string; name: string; email: string };
+
+export type SearchResultsDTO = {
+  househelps?: SearchHousehelpResultDTO[];
+  bills?: SearchBillResultDTO[];
+  checklistTasks?: SearchChecklistTaskResultDTO[];
+  members?: SearchMemberResultDTO[];
+};
