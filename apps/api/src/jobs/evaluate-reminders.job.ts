@@ -82,7 +82,7 @@ async function getRecipients(deps: Deps, householdId: string, category: "BILL" |
   for (const m of members) {
     const pref = prefByUser.get(m.userId);
     if (pref && !pref.enabled) continue;
-    recipients.push({ userId: m.userId, channels: pref?.channels ?? DEFAULT_CHANNELS });
+    recipients.push({ userId: m.userId, channels: pref?.channels?.length ? pref.channels : DEFAULT_CHANNELS });
   }
   return recipients;
 }
@@ -122,7 +122,13 @@ async function createNotification(deps: Deps, input: NotificationInput): Promise
  * against their effective reminder_rules, and creates a notification for every active member whose
  * preferences don't disable that category — gated per item by the effective rule's sendHour matching
  * the household's current local hour. In-app only: non-IN_APP deliveries are recorded PENDING for a
- * later spec's dispatcher. */
+ * later spec's dispatcher.
+ *
+ * DST caveat (documented, not fixed here): in a DST-observing timezone, the hour skipped on
+ * spring-forward is never the local hour at any hourly tick that day — a rule whose `sendHour`
+ * falls in that skipped hour silently produces nothing for offset-matched items on that one day.
+ * Same risk family as the already-accepted worker-downtime limitation (a missed tick permanently
+ * loses a non-repeating offset match); left for a later spec to address. */
 export async function runEvaluateReminders(deps: Deps): Promise<void> {
   const now = deps.clock.now();
   const allHouseholds = await deps.db.select({ id: households.id, timezone: households.timezone })
@@ -138,43 +144,57 @@ export async function runEvaluateReminders(deps: Deps): Promise<void> {
         getDueSettlements(deps, household.id, today),
       ]);
 
+      // Fetched once per household per category — invariant across every item in that category's
+      // loop below — rather than once per item. Skipped entirely when there's nothing due, to
+      // avoid two no-op queries on the (very common) "nothing due this hour" tick.
+      const billRecipients = dueBills.length > 0 ? await getRecipients(deps, household.id, "BILL") : [];
       for (const item of dueBills) {
         const outcome = outcomeFor(item);
         if (!outcome || item.sendHour !== hour) continue;
-        const { title, body } = billContent(item, outcome);
-        const recipients = await getRecipients(deps, household.id, "BILL");
-        for (const recipient of recipients) {
-          await createNotification(deps, {
-            householdId: household.id, userId: recipient.userId, category: "BILL", severity: severityFor(outcome),
-            title, body, entityType: "bill_occurrence", entityId: item.occurrenceId,
-            data: { amountDuePaise: item.amountDuePaise, dueDate: item.dueDate },
-            idempotencyKey: idempotencyKey("bill_occ", item.occurrenceId, outcome, today, recipient.userId),
-            channels: recipient.channels, now,
-          });
+        try {
+          const { title, body } = billContent(item, outcome);
+          for (const recipient of billRecipients) {
+            await createNotification(deps, {
+              householdId: household.id, userId: recipient.userId, category: "BILL", severity: severityFor(outcome),
+              title, body, entityType: "bill_occurrence", entityId: item.occurrenceId,
+              data: { amountDuePaise: item.amountDuePaise, dueDate: item.dueDate },
+              idempotencyKey: idempotencyKey("bill_occ", item.occurrenceId, outcome, today, recipient.userId),
+              channels: recipient.channels, now,
+            });
+          }
+        } catch (err) {
+          // One item's failure (a transient DB error, a deadlock) must not abort the rest of this
+          // household's bills or its settlements — log and move on to the next item. A
+          // matched-offset reminder is non-repeating (the offset won't match again next hour, and
+          // `daysUntilDue` changes tomorrow), so letting this propagate would permanently drop it.
+          deps.logger.error({ err, householdId: household.id, occurrenceId: item.occurrenceId }, "evaluate-reminders failed for bill occurrence");
         }
       }
 
+      const settlementRecipients = dueSettlements.length > 0 ? await getRecipients(deps, household.id, "SALARY") : [];
       for (const item of dueSettlements) {
         const outcome = outcomeFor(item);
         if (!outcome || item.sendHour !== hour) continue;
-        const { title, body } = settlementContent(item, outcome);
-        const recipients = await getRecipients(deps, household.id, "SALARY");
-        for (const recipient of recipients) {
-          await createNotification(deps, {
-            householdId: household.id, userId: recipient.userId, category: "SALARY", severity: severityFor(outcome),
-            title, body, entityType: "salary_settlement", entityId: item.settlementId,
-            data: { netPayablePaise: item.netPayablePaise, dueDate: item.dueDate },
-            idempotencyKey: idempotencyKey("settlement", item.settlementId, outcome, today, recipient.userId),
-            channels: recipient.channels, now,
-          });
+        try {
+          const { title, body } = settlementContent(item, outcome);
+          for (const recipient of settlementRecipients) {
+            await createNotification(deps, {
+              householdId: household.id, userId: recipient.userId, category: "SALARY", severity: severityFor(outcome),
+              title, body, entityType: "salary_settlement", entityId: item.settlementId,
+              data: { netPayablePaise: item.netPayablePaise, dueDate: item.dueDate },
+              idempotencyKey: idempotencyKey("settlement", item.settlementId, outcome, today, recipient.userId),
+              channels: recipient.channels, now,
+            });
+          }
+        } catch (err) {
+          deps.logger.error({ err, householdId: household.id, settlementId: item.settlementId }, "evaluate-reminders failed for salary settlement");
         }
       }
     } catch (err) {
-      // One household's failure (a query blip, an unexpected data shape) must not abort every
-      // household processed after it in this hourly tick — log and move on. A matched-offset
-      // reminder is non-repeating (the offset won't match again on a retry an hour later), so an
-      // uncaught error here could permanently drop it for that occurrence; a daily-overdue item
-      // tries again tomorrow regardless.
+      // One household's failure before the item loops even start (bad timezone data, a failed
+      // evaluation query) must not abort every household processed after it in this hourly tick —
+      // log and move on. Per-item failures inside the loops are caught above, closer to the item
+      // that failed, so this outer net is now only for household-wide setup failures.
       deps.logger.error({ err, householdId: household.id }, "evaluate-reminders failed for household");
     }
   }

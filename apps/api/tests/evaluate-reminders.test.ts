@@ -203,4 +203,30 @@ describe("runEvaluateReminders", () => {
     expect(errorSpy).toHaveBeenCalledWith(expect.objectContaining({ householdId: hBad.id }), expect.any(String));
     errorSpy.mockRestore();
   });
+
+  it("isolates one bill item's failure from another's within the same household", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    await createBill(h, owner.cookie, addDays(TODAY, 7)); // occurrence 1
+    await createBill(h, owner.cookie, addDays(TODAY, 7)); // occurrence 2, same offset, same recipient
+
+    // Simulate a transient DB error (deadlock, blip) on the very first createNotification call —
+    // i.e. the first occurrence — while leaving every subsequent transaction call (the second
+    // occurrence's) to behave normally.
+    const txSpy = vi.spyOn(ctx.db, "transaction");
+    txSpy.mockImplementationOnce(() => Promise.reject(new Error("simulated transient DB error")));
+    const errorSpy = vi.spyOn(ctx.deps.logger, "error").mockImplementation(() => undefined as never);
+
+    await runEvaluateReminders(ctx.deps);
+
+    // The first occurrence's failure must not abort the second occurrence's processing: one
+    // notification (for the second occurrence) still gets created, and the first occurrence's
+    // failure is logged with its own occurrenceId rather than silently swallowed or propagated.
+    const rows = await ctx.db.select().from(notifications).where(eq(notifications.householdId, h.id));
+    expect(rows).toHaveLength(1);
+    expect(errorSpy).toHaveBeenCalledWith(expect.objectContaining({ householdId: h.id, occurrenceId: expect.any(String) }), expect.any(String));
+
+    txSpy.mockRestore();
+    errorSpy.mockRestore();
+  });
 });
