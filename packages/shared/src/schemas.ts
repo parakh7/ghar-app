@@ -373,3 +373,6 @@ export const updateReminderRuleSchema = z.object({
 
 export type CreateReminderRuleInput = z.infer<typeof createReminderRuleSchema>;
 export type UpdateReminderRuleInput = z.infer<typeof updateReminderRuleSchema>;
+
+export const notificationActionSchema = z.object({ action: z.enum(["read", "dismiss"]) });
+export type NotificationActionInput = z.infer<typeof notificationActionSchema>;

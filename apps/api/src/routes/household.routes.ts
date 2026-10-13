@@ -1,6 +1,6 @@
 import { Router } from "express";
 import type { OccurrenceStatus } from "@household/shared";
-import { billStatusSchema, createAdjustmentSchema, createBillCategorySchema, createBillSchema, createCategorySchema, createChecklistTaskSchema, createHousehelpSchema, createHouseholdSchema, createReminderRuleSchema, dateSchema, generateSettlementSchema, inviteMemberSchema, markAttendanceSchema, markCompletionSchema, markHolidaySchema, monthSchema, moveCategorySchema, occurrenceStatusSchema, putAssignmentsSchema, recordBillPaymentSchema, recordPaymentSchema, updateBillCategorySchema, updateBillSchema, updateCategorySchema, updateChecklistTaskSchema, updateHousehelpSchema, updateHouseholdSchema, updateMemberSchema, updateOccurrenceAmountSchema, updateReminderRuleSchema, updateScheduleSchema, voidReasonSchema, waiveOccurrenceSchema } from "@household/shared";
+import { billStatusSchema, createAdjustmentSchema, createBillCategorySchema, createBillSchema, createCategorySchema, createChecklistTaskSchema, createHousehelpSchema, createHouseholdSchema, createReminderRuleSchema, dateSchema, generateSettlementSchema, inviteMemberSchema, markAttendanceSchema, markCompletionSchema, markHolidaySchema, monthSchema, moveCategorySchema, notificationActionSchema, occurrenceStatusSchema, putAssignmentsSchema, recordBillPaymentSchema, recordPaymentSchema, updateBillCategorySchema, updateBillSchema, updateCategorySchema, updateChecklistTaskSchema, updateHousehelpSchema, updateHouseholdSchema, updateMemberSchema, updateOccurrenceAmountSchema, updateReminderRuleSchema, updateScheduleSchema, voidReasonSchema, waiveOccurrenceSchema } from "@household/shared";
 import { requireAuth } from "../middleware/auth.js";
 import { requireHousehold } from "../middleware/household.js";
 import { inviteLimiter } from "../middleware/rate-limit.js";
@@ -20,6 +20,7 @@ import * as checklistTasks from "../services/checklist-task.service.js";
 import * as households from "../services/household.service.js";
 import * as househelps from "../services/househelp.service.js";
 import * as members from "../services/member.service.js";
+import * as notificationsService from "../services/notification.service.js";
 import * as reminderRules from "../services/reminder-rule.service.js";
 import * as schedules from "../services/schedule.service.js";
 import * as salaryAdjustments from "../services/salary-adjustment.service.js";
@@ -447,6 +448,24 @@ export function householdRoutes(deps: Deps): Router {
   r.delete("/:householdId/reminder-rules/:ruleId", requireHousehold(deps, "reminders.manage"), async (req, res) => {
     await reminderRules.deleteReminderRule(deps, req.auth!.user.id, req.membership!, req.params.ruleId as string, req.ip);
     ok(res, null, 200, "Reminder rule removed.");
+  });
+
+  r.get("/:householdId/notifications", requireHousehold(deps, "household.view"), async (req, res) => {
+    ok(res, await notificationsService.listNotifications(deps, req.auth!.user.id, req.membership!));
+  });
+
+  r.get("/:householdId/notifications/unread-count", requireHousehold(deps, "household.view"), async (req, res) => {
+    ok(res, { count: await notificationsService.getUnreadCount(deps, req.auth!.user.id, req.membership!) });
+  });
+
+  r.patch("/:householdId/notifications/:id", requireHousehold(deps, "household.view"), async (req, res) => {
+    const { action } = parseBody(req, notificationActionSchema);
+    ok(res, await notificationsService.markNotification(deps, req.auth!.user.id, req.membership!, req.params.id as string, action));
+  });
+
+  r.post("/:householdId/notifications/mark-all-read", requireHousehold(deps, "household.view"), async (req, res) => {
+    await notificationsService.markAllRead(deps, req.auth!.user.id, req.membership!);
+    ok(res, null);
   });
 
   return r;

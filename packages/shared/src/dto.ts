@@ -114,3 +114,12 @@ export type ReminderRuleDTO = {
   id: string; targetType: ReminderTargetType; targetId: string | null;
   offsetsDays: number[]; overdueDaily: boolean; sendHour: number; isActive: boolean; createdAt: string;
 };
+
+export type NotificationCategory = "BILL" | "SALARY" | "ATTENDANCE" | "CHECKLIST" | "SYSTEM";
+export type NotificationSeverity = "INFO" | "SUCCESS" | "WARNING" | "URGENT";
+
+export type NotificationDTO = {
+  id: string; category: NotificationCategory; severity: NotificationSeverity;
+  title: string; body: string | null; linkPath: string | null;
+  readAt: string | null; dismissedAt: string | null; createdAt: string;
+};
