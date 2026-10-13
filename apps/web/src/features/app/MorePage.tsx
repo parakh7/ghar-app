@@ -61,6 +61,9 @@ export function MorePage() {
         <Link to="/settings/notifications" className="list__item">
           <span className="list__label">Notification settings</span>
         </Link>
+        <Link to="/reports" className="list__item">
+          <span className="list__label">Reports</span>
+        </Link>
       </div>
 
       <h2 className="section-title">Account</h2>
