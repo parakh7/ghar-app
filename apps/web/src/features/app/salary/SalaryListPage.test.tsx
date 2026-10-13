@@ -66,4 +66,22 @@ describe("SalaryListPage", () => {
       expect(body).toEqual({ periodMonth: "2026-11-01" });
     });
   });
+
+  it("shows the specific field reason from a validation error, not the generic top-level message", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/households/h1")) return jsonResponse({ success: true, data: { ...HOUSEHOLD, permissions: ["salaries.view", "salaries.manage"] }, message: null });
+      if (url.endsWith("/households/h1/househelps")) return jsonResponse({ success: true, data: [SUNITA], message: null });
+      if (init?.method === "POST" && url.endsWith("/households/h1/househelps/hh1/salary/settlements")) {
+        return jsonResponse({ success: false, error: { code: "VALIDATION_ERROR", message: "Please check the highlighted fields.", fields: { monthlySalaryPaise: "This househelp has no monthly salary set." } } }, 400);
+      }
+      if (url.endsWith("/households/h1/househelps/hh1/salary/settlements")) return jsonResponse({ success: true, data: [], message: null });
+      throw new Error(`unexpected fetch ${url}`);
+    }) as typeof fetch);
+    renderPage();
+    await screen.findByRole("heading", { name: "Sunita" });
+    await userEvent.click(screen.getByRole("button", { name: "Generate settlement" }));
+    expect(await screen.findByText("This househelp has no monthly salary set.")).toBeInTheDocument();
+    expect(screen.queryByText("Please check the highlighted fields.")).not.toBeInTheDocument();
+  });
 });

@@ -14,7 +14,9 @@ import { STATUS_LABEL, toneOf } from "./statusTone";
 import { useGenerateSettlement, useHousehelpSettlements } from "./useSalary";
 
 function messageFrom(err: unknown): string {
-  return err instanceof ApiError ? err.message : "Something went wrong. Please try again.";
+  if (!(err instanceof ApiError)) return "Something went wrong. Please try again.";
+  const fieldMessage = err.fields ? Object.values(err.fields)[0] : undefined;
+  return fieldMessage ?? err.message;
 }
 
 /** "2026-10-01" -> "October 2026". */
