@@ -376,3 +376,9 @@ export type UpdateReminderRuleInput = z.infer<typeof updateReminderRuleSchema>;
 
 export const notificationActionSchema = z.object({ action: z.enum(["read", "dismiss"]) });
 export type NotificationActionInput = z.infer<typeof notificationActionSchema>;
+
+export const updateNotificationPreferenceSchema = z.object({
+  enabled: z.boolean().optional(),
+  emailEnabled: z.boolean().optional(),
+}).refine((v) => v.enabled !== undefined || v.emailEnabled !== undefined, { message: "Provide at least one field to update." });
+export type UpdateNotificationPreferenceInput = z.infer<typeof updateNotificationPreferenceSchema>;

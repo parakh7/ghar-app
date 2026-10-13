@@ -123,3 +123,9 @@ export type NotificationDTO = {
   title: string; body: string | null; linkPath: string | null;
   readAt: string | null; dismissedAt: string | null; createdAt: string;
 };
+
+export type SettableNotificationCategory = "BILL" | "SALARY";
+
+export type NotificationPreferenceDTO = {
+  category: SettableNotificationCategory; enabled: boolean; emailEnabled: boolean;
+};
