@@ -1,8 +1,9 @@
 import { NavLink, Outlet } from "react-router-dom";
-import { Bell, ClipboardCheck, Home, MoreHorizontal, ReceiptIndianRupee, Users } from "lucide-react";
+import { Bell, ClipboardCheck, Home, MoreHorizontal, ReceiptIndianRupee, Search, Users } from "lucide-react";
 import { Logo } from "../../components/Logo";
 import { NotificationBadge } from "../notifications/NotificationBadge";
 import { useUnreadCount } from "../notifications/useNotifications";
+import { SearchInput } from "../search/SearchInput";
 import { useActiveHousehold } from "./useActiveHousehold";
 import "./shell.css";
 
@@ -20,6 +21,9 @@ export function AppShell() {
   return (
     <div className="shell">
       <a href="#main" className="skip-link">Skip to content</a>
+      <NavLink to="/search" className="shell__mobile-search" aria-label="Open search">
+        <Search size={20} aria-hidden strokeWidth={2} />
+      </NavLink>
       <nav className="shell__nav" aria-label="Main">
         <div className="shell__brand">
           <Logo size={32} />
@@ -32,6 +36,7 @@ export function AppShell() {
             <NotificationBadge count={unreadCount} />
           </NavLink>
         </div>
+        <SearchInput />
         <ul>
           {NAV.map(({ to, label, icon: Icon, end }) => (
             <li key={to}>

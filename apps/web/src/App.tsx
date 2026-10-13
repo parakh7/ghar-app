@@ -28,6 +28,7 @@ import { MorePage } from "./features/app/MorePage";
 import { NotificationsPage } from "./features/notifications/NotificationsPage";
 import { NotificationSettingsPage } from "./features/settings/NotificationSettingsPage";
 import { OnboardingPage } from "./features/app/OnboardingPage";
+import { SearchPage } from "./features/search/SearchPage";
 import { SalaryListPage } from "./features/app/salary/SalaryListPage";
 import { SettlementDetailPage } from "./features/app/salary/SettlementDetailPage";
 
@@ -67,6 +68,7 @@ export function App() {
         <Route path="members" element={<MembersPage />} />
         <Route path="notifications" element={<NotificationsPage />} />
         <Route path="settings/notifications" element={<NotificationSettingsPage />} />
+        <Route path="search" element={<SearchPage />} />
         <Route path="more" element={<MorePage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

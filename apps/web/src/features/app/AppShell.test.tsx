@@ -1,5 +1,6 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { meKey } from "../auth/session";
@@ -22,7 +23,10 @@ function renderShell(unreadCount: number) {
   return render(
     <QueryClientProvider client={qc}>
       <MemoryRouter initialEntries={["/"]}>
-        <Routes><Route element={<AppShell />}><Route index element={<div>Home page body</div>} /></Route></Routes>
+        <Routes>
+          <Route element={<AppShell />}><Route index element={<div>Home page body</div>} /></Route>
+          <Route path="/search" element={<div>Search results page</div>} />
+        </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
   );
@@ -41,5 +45,19 @@ describe("AppShell", () => {
     renderShell(0);
     await screen.findByText("Home page body");
     expect(screen.queryByLabelText(/unread notifications/)).not.toBeInTheDocument();
+  });
+
+  it("has a mobile search icon linking to /search", async () => {
+    renderShell(0);
+    await screen.findByText("Home page body");
+    expect(screen.getByLabelText("Open search")).toHaveAttribute("href", "/search");
+  });
+
+  it("navigates to /search after typing in the desktop search input (debounced)", async () => {
+    renderShell(0);
+    const input = await screen.findByPlaceholderText("Search");
+    await userEvent.type(input, "sunita");
+    await new Promise((r) => setTimeout(r, 350));
+    await screen.findByText("Search results page");
   });
 });
