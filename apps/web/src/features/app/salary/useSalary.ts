@@ -1,11 +1,9 @@
-import { useMemo } from "react";
-import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   AdjustmentDTO, CreateAdjustmentInput, GenerateSettlementInput,
   RecordPaymentInput, SalaryPaymentDTO, SettlementDTO,
 } from "@household/shared";
 import { del, get, post } from "../../../lib/api";
-import { useHousehelps } from "../househelps/useHousehelps";
 
 export type SettlementDetailDTO = SettlementDTO & { adjustments: AdjustmentDTO[]; payments: SalaryPaymentDTO[] };
 
@@ -75,36 +73,4 @@ export function useVoidPayment(householdId: string) {
       del<null>(`/households/${householdId}/salary/payments/${paymentId}${reason ? `?reason=${encodeURIComponent(reason)}` : ""}`),
     onSuccess: (_data, { househelpId, settlementId }) => invalidateSalary(qc, householdId, househelpId, settlementId),
   });
-}
-
-/**
- * Household-wide "what's due soonest" view for the Home card. The API only lists settlements
- * per househelp (there's no household-wide settlements endpoint), so this fans out one list
- * query per active househelp and picks the non-final settlement with the nearest due date.
- * `enabled` lets callers skip the whole fan-out when the viewer lacks salaries.view.
- */
-export function useUpcomingSettlement(householdId: string | undefined, enabled: boolean) {
-  const househelpsQuery = useHousehelps(enabled ? householdId : undefined, false);
-  const househelps = useMemo(() => househelpsQuery.data ?? [], [househelpsQuery.data]);
-
-  const results = useQueries({
-    queries: househelps.map((h) => ({
-      queryKey: ["salary-settlements", householdId, h.id],
-      queryFn: ({ signal }: { signal: AbortSignal }) =>
-        get<SettlementDTO[]>(`/households/${householdId}/househelps/${h.id}/salary/settlements`, signal).then((r) => r.data),
-      enabled: enabled && !!householdId,
-    })),
-  });
-
-  const isLoading = (enabled && househelpsQuery.isLoading) || results.some((r) => r.isLoading);
-  const hasAnySettlement = results.some((r) => (r.data?.length ?? 0) > 0);
-
-  const upcoming = useMemo(() => {
-    const flat = results.flatMap((r, i) => (r.data ?? []).map((settlement) => ({ settlement, househelpName: househelps[i]!.name })));
-    const unpaid = flat.filter((x) => x.settlement.status !== "PAID" && x.settlement.status !== "CANCELLED");
-    unpaid.sort((a, b) => a.settlement.dueDate.localeCompare(b.settlement.dueDate));
-    return unpaid[0] ?? null;
-  }, [results, househelps]);
-
-  return { isLoading, hasAnySettlement, upcoming };
 }
