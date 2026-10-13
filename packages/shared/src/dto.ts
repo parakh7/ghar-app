@@ -160,3 +160,29 @@ export type SearchResultsDTO = {
   checklistTasks?: SearchChecklistTaskResultDTO[];
   members?: SearchMemberResultDTO[];
 };
+
+export type ReportType = "bills" | "salary" | "attendance" | "checklist";
+
+export type BillsReportRowDTO = {
+  occurrenceId: string; billId: string; billName: string; dueDate: string;
+  amountDuePaise: number; amountPaidPaise: number; status: OccurrenceStatus;
+};
+export type BillsReportDTO = { type: "bills"; rows: BillsReportRowDTO[]; totalDuePaise: number; totalPaidPaise: number };
+
+export type SalaryReportRowDTO = {
+  settlementId: string; househelpId: string; househelpName: string;
+  netPayablePaise: number; amountPaidPaise: number; status: SettlementStatus;
+};
+export type SalaryReportDTO = { type: "salary"; rows: SalaryReportRowDTO[]; totalNetPayablePaise: number; totalPaidPaise: number };
+
+export type AttendanceReportRowDTO = {
+  househelpId: string; name: string; present: number; absent: number; halfDay: number; leave: number; holiday: number;
+};
+export type AttendanceReportDTO = { type: "attendance"; rows: AttendanceReportRowDTO[] };
+
+export type ChecklistReportRowDTO = {
+  taskId: string; name: string; dueCount: number; completedCount: number; skippedCount: number; missedCount: number;
+};
+export type ChecklistReportDTO = { type: "checklist"; rows: ChecklistReportRowDTO[] };
+
+export type ReportDTO = BillsReportDTO | SalaryReportDTO | AttendanceReportDTO | ChecklistReportDTO;

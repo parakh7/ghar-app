@@ -1,6 +1,6 @@
 import { and, asc, eq, gte, inArray, lte } from "drizzle-orm";
 import type { BillOccurrenceDTO, BillFrequency, BillStatus, OccurrenceStatus, UpdateOccurrenceAmountInput, WaiveOccurrenceInput } from "@household/shared";
-import { dateInZone, daysBetween, occurrenceDueDate, parseDateParts } from "@household/shared";
+import { dateInZone, daysBetween, daysInMonth, occurrenceDueDate, parseDateParts } from "@household/shared";
 import { bills, billOccurrences, billPayments } from "../db/schema.js";
 import type { DbOrTx } from "../db/client.js";
 import { Errors } from "../lib/errors.js";
@@ -366,6 +366,32 @@ export async function listDueOccurrencesForHousehold(deps: Deps, householdId: st
       eq(bills.status, "ACTIVE"),
       inArray(billOccurrences.status, ["PENDING", "PARTIALLY_PAID"]),
     ))
+    .orderBy(asc(billOccurrences.dueDate));
+  return rows;
+}
+
+export type MonthOccurrenceRow = {
+  occurrenceId: string; billId: string; billName: string; dueDate: string;
+  amountDuePaise: number; amountPaidPaise: number; status: OccurrenceStatus;
+};
+
+/**
+ * Household-wide, cross-bill, cross-status view of occurrences due within a specific month — for
+ * Phase 8's reports. Unlike `listDueOccurrencesForHousehold` (household-wide but still-open-only),
+ * a spend report needs paid/waived occurrences too, scoped to one month rather than "everything
+ * currently open."
+ */
+export async function listOccurrencesDueInMonth(deps: Deps, householdId: string, month: string): Promise<MonthOccurrenceRow[]> {
+  const [y, m] = month.split("-").map(Number);
+  const start = `${month}-01`;
+  const end = `${month}-${String(daysInMonth(y!, m!)).padStart(2, "0")}`;
+  const rows = await deps.db.select({
+    occurrenceId: billOccurrences.id, billId: billOccurrences.billId, billName: bills.name,
+    dueDate: billOccurrences.dueDate, amountDuePaise: billOccurrences.amountDuePaise,
+    amountPaidPaise: billOccurrences.amountPaidPaise, status: billOccurrences.status,
+  }).from(billOccurrences)
+    .innerJoin(bills, and(eq(bills.householdId, billOccurrences.householdId), eq(bills.id, billOccurrences.billId)))
+    .where(and(eq(billOccurrences.householdId, householdId), gte(billOccurrences.dueDate, start), lte(billOccurrences.dueDate, end)))
     .orderBy(asc(billOccurrences.dueDate));
   return rows;
 }

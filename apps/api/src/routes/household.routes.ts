@@ -1,6 +1,6 @@
 import { Router } from "express";
 import type { OccurrenceStatus } from "@household/shared";
-import { billStatusSchema, createAdjustmentSchema, createBillCategorySchema, createBillSchema, createCategorySchema, createChecklistTaskSchema, createHousehelpSchema, createHouseholdSchema, createReminderRuleSchema, dateSchema, generateSettlementSchema, inviteMemberSchema, markAttendanceSchema, markCompletionSchema, markHolidaySchema, monthSchema, moveCategorySchema, notificationActionSchema, occurrenceStatusSchema, putAssignmentsSchema, recordBillPaymentSchema, recordPaymentSchema, updateBillCategorySchema, updateBillSchema, updateCategorySchema, updateChecklistTaskSchema, updateHousehelpSchema, updateHouseholdSchema, updateMemberSchema, updateNotificationPreferenceSchema, updateOccurrenceAmountSchema, updateReminderRuleSchema, updateScheduleSchema, voidReasonSchema, waiveOccurrenceSchema } from "@household/shared";
+import { billStatusSchema, createAdjustmentSchema, createBillCategorySchema, createBillSchema, createCategorySchema, createChecklistTaskSchema, createHousehelpSchema, createHouseholdSchema, createReminderRuleSchema, dateSchema, generateSettlementSchema, inviteMemberSchema, markAttendanceSchema, markCompletionSchema, markHolidaySchema, monthSchema, moveCategorySchema, notificationActionSchema, occurrenceStatusSchema, putAssignmentsSchema, recordBillPaymentSchema, recordPaymentSchema, updateBillCategorySchema, updateBillSchema, updateCategorySchema, updateChecklistTaskSchema, updateHousehelpSchema, updateHouseholdSchema, updateMemberSchema, updateNotificationPreferenceSchema, updateOccurrenceAmountSchema, updateReminderRuleSchema, updateScheduleSchema, reportTypeSchema, voidReasonSchema, waiveOccurrenceSchema } from "@household/shared";
 import { requireAuth } from "../middleware/auth.js";
 import { requireHousehold } from "../middleware/household.js";
 import { inviteLimiter } from "../middleware/rate-limit.js";
@@ -26,6 +26,7 @@ import * as reminderRules from "../services/reminder-rule.service.js";
 import * as schedules from "../services/schedule.service.js";
 import * as salaryAdjustments from "../services/salary-adjustment.service.js";
 import * as salaryPayments from "../services/salary-payment.service.js";
+import * as reportService from "../services/report.service.js";
 import * as salarySettlements from "../services/salary-settlement.service.js";
 import * as searchService from "../services/search.service.js";
 import * as today from "../services/today.service.js";
@@ -487,6 +488,14 @@ export function householdRoutes(deps: Deps): Router {
   r.get("/:householdId/search", requireHousehold(deps, "household.view"), async (req, res) => {
     const q = typeof req.query.q === "string" ? req.query.q : "";
     ok(res, await searchService.search(deps, req.membership!, q));
+  });
+
+  r.get("/:householdId/reports", requireHousehold(deps, "reports.view"), async (req, res) => {
+    const typeParsed = reportTypeSchema.safeParse(req.query.type);
+    if (!typeParsed.success) throw Errors.validation({ type: "Use bills, salary, attendance, or checklist." });
+    const monthParsed = monthSchema.safeParse(req.query.month);
+    if (!monthParsed.success) throw Errors.validation({ month: "Use YYYY-MM." });
+    ok(res, await reportService.getReport(deps, req.membership!, typeParsed.data, monthParsed.data));
   });
 
   return r;

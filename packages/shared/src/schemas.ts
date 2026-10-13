@@ -382,3 +382,5 @@ export const updateNotificationPreferenceSchema = z.object({
   emailEnabled: z.boolean().optional(),
 }).refine((v) => v.enabled !== undefined || v.emailEnabled !== undefined, { message: "Provide at least one field to update." });
 export type UpdateNotificationPreferenceInput = z.infer<typeof updateNotificationPreferenceSchema>;
+
+export const reportTypeSchema = z.enum(["bills", "salary", "attendance", "checklist"]);
