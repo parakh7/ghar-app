@@ -99,7 +99,7 @@ describe("runDispatchEmailDeliveries", () => {
     const [updated] = await ctx.db.select().from(notificationDeliveries).where(eq(notificationDeliveries.id, delivery.id));
     expect(updated!.status).toBe("SENT");
     expect(updated!.sentAt).not.toBeNull();
-    const sent = ctx.email.sent.find((m) => m.to === owner.email);
+    const sent = ctx.email.sent.find((m) => m.to === owner.email && m.tag === "reminder-notification");
     expect(sent).toMatchObject({ subject: notification.title, tag: "reminder-notification" });
   });
 
@@ -112,7 +112,9 @@ describe("runDispatchEmailDeliveries", () => {
 
     const [updated] = await ctx.db.select().from(notificationDeliveries).where(eq(notificationDeliveries.id, delivery.id));
     expect(updated!.status).toBe("SKIPPED");
-    expect(ctx.email.sent).toHaveLength(0);
+    // signupUser itself fires a verify-email (fire-and-forget) to this same address — filter by
+    // tag, not just `to`, or this assertion would false-pass/fail on that unrelated email.
+    expect(ctx.email.sent.find((m) => m.to === owner.email && m.tag === "reminder-notification")).toBeUndefined();
   });
 
   it("increments attempts and records lastError on failure, staying PENDING under 3 attempts", async () => {
@@ -178,7 +180,7 @@ describe("runDispatchEmailDeliveries", () => {
 
     await runDispatchEmailDeliveries(ctx.deps);
 
-    expect(ctx.email.sent).toHaveLength(0);
+    expect(ctx.email.sent.find((m) => m.to === owner.email && m.tag === "reminder-notification")).toBeUndefined();
     const [sentRow] = await ctx.db.select().from(notificationDeliveries).where(eq(notificationDeliveries.id, alreadySent.id));
     const [inAppRow] = await ctx.db.select().from(notificationDeliveries).where(eq(notificationDeliveries.id, inApp.id));
     expect(sentRow!.status).toBe("SENT");
