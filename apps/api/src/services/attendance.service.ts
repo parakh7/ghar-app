@@ -1,5 +1,5 @@
 import { and, asc, eq, gte, isNull, lt, lte, or } from "drizzle-orm";
-import type { AttendanceRecordDTO, AttendanceStatus, MarkAttendanceInput, MarkHolidayResultDTO, Permission, TodayAttendanceDTO } from "@household/shared";
+import type { AttendanceRecordDTO, AttendanceStatus, MarkAttendanceInput, MarkHolidayResultDTO, MarkRemainingPresentResultDTO, Permission, TodayAttendanceDTO } from "@household/shared";
 import { dateInZone } from "@household/shared";
 import { attendanceRecords, attendanceSchedules, househelps } from "../db/schema.js";
 import type { DbOrTx } from "../db/client.js";
@@ -7,6 +7,7 @@ import { Errors } from "../lib/errors.js";
 import { recordAudit } from "./audit.service.js";
 import type { Deps } from "./deps.js";
 import type { Membership } from "./household.service.js";
+import { getCurrentSchedule } from "./schedule.service.js";
 
 type AuthedMembership = Membership & { permissions: Set<Permission> };
 
@@ -151,6 +152,49 @@ export async function markHoliday(deps: Deps, actorUserId: string, membership: A
     return active.length;
   });
   return { date, count };
+}
+
+export async function markRemainingPresent(
+  deps: Deps, actorUserId: string, membership: AuthedMembership, househelpId: string, month: string, ip?: string,
+): Promise<MarkRemainingPresentResultDTO> {
+  await requireHousehelpInHousehold(deps.db, membership.householdId, househelpId);
+  const today = dateInZone(deps.clock.now(), membership.timezone);
+  const schedule = await getCurrentSchedule(deps, membership, househelpId);
+  const scheduledWeekdays = new Set(schedule?.weekdays ?? []);
+  const existing = await getMonthAttendance(deps.db, membership.householdId, househelpId, month);
+  const alreadyRecorded = new Set(existing.map((r) => r.date));
+
+  const todayMonth = today.slice(0, 7);
+  const [y, m] = month.split("-").map(Number);
+  const daysInMonth = new Date(Date.UTC(y!, m!, 0)).getUTCDate();
+  const lastDay = month < todayMonth ? daysInMonth : month > todayMonth ? 0 : Number(today.slice(8, 10));
+
+  const dates: string[] = [];
+  for (let day = 1; day <= lastDay; day++) {
+    const d = `${month}-${String(day).padStart(2, "0")}`;
+    if (!scheduledWeekdays.has(isoWeekdayOf(d))) continue;
+    if (alreadyRecorded.has(d)) continue;
+    dates.push(d);
+  }
+  if (dates.length === 0) return { month, count: 0 };
+
+  const requiresHistory = dates.some((d) => d !== today);
+  if (requiresHistory && !membership.permissions.has("attendance.editHistory")) throw Errors.forbidden();
+
+  const now = deps.clock.now();
+  await deps.db.transaction(async (tx) => {
+    await tx.insert(attendanceRecords).values(dates.map((d) => ({
+      householdId: membership.householdId, househelpId, date: d, status: "PRESENT" as const, note: null,
+      markedByUserId: actorUserId, markedAt: now,
+    })));
+    if (requiresHistory) {
+      await recordAudit(tx, {
+        householdId: membership.householdId, actorUserId, action: "attendance.remainingMarkedPresent", entityType: "attendance_record",
+        newValue: { month, count: dates.length }, ipAddress: ip ?? null,
+      });
+    }
+  });
+  return { month, count: dates.length };
 }
 
 function nextMonth(month: string): string {

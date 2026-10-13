@@ -62,6 +62,8 @@ export type TodayAttendanceDTO = { date: string; entries: TodayAttendanceEntryDT
 
 export type MarkHolidayResultDTO = { date: string; count: number };
 
+export type MarkRemainingPresentResultDTO = { month: string; count: number };
+
 export type TaskFrequency = "DAILY" | "WEEKLY" | "WEEKDAYS" | "MONTHLY" | "SPECIFIC_DATE" | "CUSTOM";
 export type TaskPriority = "LOW" | "NORMAL" | "HIGH";
 

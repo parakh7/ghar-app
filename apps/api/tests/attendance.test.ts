@@ -259,3 +259,83 @@ describe("attendance — monthly calendar", () => {
     expect(res.status).toBe(404);
   });
 });
+
+describe("attendance — mark remaining as present", () => {
+  it("marks every unmarked scheduled day up to today as PRESENT, skipping already-marked and off-schedule days", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    const help = await createHousehelp(ctx, owner.cookie, h.id);
+    await ctx.request.put(`/api/households/${h.id}/househelps/${help.id}/schedule`).set(csrf).set("cookie", owner.cookie).send({ weekdays: [1, 2, 3, 4, 5] });
+    // 2026-09-15 (Tue) already PRESENT, 2026-09-16 (Wed) already HOLIDAY — both scheduled weekdays.
+    await ctx.request.put(`/api/households/${h.id}/attendance/${help.id}`).set(csrf).set("cookie", owner.cookie).send({ date: "2026-09-15", status: "PRESENT" });
+    await ctx.request.post(`/api/households/${h.id}/attendance/holiday`).set(csrf).set("cookie", owner.cookie).send({ date: "2026-09-16" });
+
+    const res = await ctx.request.post(`/api/households/${h.id}/househelps/${help.id}/attendance/remaining-present`).set(csrf).set("cookie", owner.cookie).send({ month: "2026-09" });
+    expect(res.status).toBe(200);
+    // 22 scheduled Mon-Fri weekdays occur in September 2026 by the pinned "today" (the 29th);
+    // 2 of those are already recorded (15th, 16th), leaving 20 to mark.
+    expect(res.body.data).toEqual({ month: "2026-09", count: 20 });
+
+    const rows = await ctx.db.select().from(attendanceRecords).where(eq(attendanceRecords.househelpId, help.id));
+    expect(rows).toHaveLength(22);
+    const sep15 = rows.find((r) => r.date === "2026-09-15");
+    expect(sep15?.status).toBe("PRESENT");
+    const sep16 = rows.find((r) => r.date === "2026-09-16");
+    expect(sep16?.status).toBe("HOLIDAY");
+    const sep1 = rows.find((r) => r.date === "2026-09-01");
+    expect(sep1?.status).toBe("PRESENT");
+  });
+
+  it("records one summary audit entry for the bulk action", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    const help = await createHousehelp(ctx, owner.cookie, h.id);
+    await ctx.request.put(`/api/households/${h.id}/househelps/${help.id}/schedule`).set(csrf).set("cookie", owner.cookie).send({ weekdays: [1, 2, 3, 4, 5] });
+    await ctx.request.post(`/api/households/${h.id}/househelps/${help.id}/attendance/remaining-present`).set(csrf).set("cookie", owner.cookie).send({ month: "2026-09" });
+    const logs = await ctx.db.select().from(auditLogs).where(and(eq(auditLogs.householdId, h.id), eq(auditLogs.action, "attendance.remainingMarkedPresent")));
+    expect(logs).toHaveLength(1);
+    expect(logs[0]?.newValue).toEqual({ month: "2026-09", count: 22 });
+  });
+
+  it("is a no-op with count 0 and no audit entry when there's nothing to mark (no schedule set)", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    const help = await createHousehelp(ctx, owner.cookie, h.id);
+    const res = await ctx.request.post(`/api/households/${h.id}/househelps/${help.id}/attendance/remaining-present`).set(csrf).set("cookie", owner.cookie).send({ month: "2026-09" });
+    expect(res.status).toBe(200);
+    expect(res.body.data).toEqual({ month: "2026-09", count: 0 });
+    const logs = await ctx.db.select().from(auditLogs).where(and(eq(auditLogs.householdId, h.id), eq(auditLogs.action, "attendance.remainingMarkedPresent")));
+    expect(logs).toHaveLength(0);
+  });
+
+  it("403s without attendance.mark", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    const help = await createHousehelp(ctx, owner.cookie, h.id);
+    const viewer = await signupUser(ctx);
+    await addMember(h.id, viewer.id, "VIEWER");
+    const res = await ctx.request.post(`/api/households/${h.id}/househelps/${help.id}/attendance/remaining-present`).set(csrf).set("cookie", viewer.cookie).send({ month: "2026-09" });
+    expect(res.status).toBe(403);
+  });
+
+  it("403s without attendance.editHistory when at least one eligible date is in the past", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    const help = await createHousehelp(ctx, owner.cookie, h.id);
+    await ctx.request.put(`/api/households/${h.id}/househelps/${help.id}/schedule`).set(csrf).set("cookie", owner.cookie).send({ weekdays: [1, 2, 3, 4, 5] });
+    const member = await signupUser(ctx);
+    await addMember(h.id, member.id, "MEMBER");
+    const res = await ctx.request.post(`/api/households/${h.id}/househelps/${help.id}/attendance/remaining-present`).set(csrf).set("cookie", member.cookie).send({ month: "2026-09" });
+    expect(res.status).toBe(403);
+  });
+
+  it("never marks another household's attendance", async () => {
+    const ownerA = await signupUser(ctx);
+    const a = await createHousehold(ctx, ownerA.cookie, "Household A");
+    const helpA = await createHousehelp(ctx, ownerA.cookie, a.id);
+    const ownerB = await signupUser(ctx);
+    const b = await createHousehold(ctx, ownerB.cookie, "Household B");
+    const res = await ctx.request.post(`/api/households/${b.id}/househelps/${helpA.id}/attendance/remaining-present`).set(csrf).set("cookie", ownerB.cookie).send({ month: "2026-09" });
+    expect(res.status).toBe(404);
+  });
+});

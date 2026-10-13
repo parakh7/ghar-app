@@ -1,6 +1,6 @@
 import { Router } from "express";
 import type { OccurrenceStatus } from "@household/shared";
-import { billStatusSchema, createAdjustmentSchema, createBillCategorySchema, createBillSchema, createCategorySchema, createChecklistTaskSchema, createHousehelpSchema, createHouseholdSchema, createReminderRuleSchema, dateSchema, generateSettlementSchema, inviteMemberSchema, markAttendanceSchema, markCompletionSchema, markHolidaySchema, monthSchema, moveCategorySchema, notificationActionSchema, occurrenceStatusSchema, putAssignmentsSchema, recordBillPaymentSchema, recordPaymentSchema, updateBillCategorySchema, updateBillSchema, updateCategorySchema, updateChecklistTaskSchema, updateHousehelpSchema, updateHouseholdSchema, updateMemberSchema, updateNotificationPreferenceSchema, updateOccurrenceAmountSchema, updateReminderRuleSchema, updateScheduleSchema, reportTypeSchema, voidReasonSchema, waiveOccurrenceSchema } from "@household/shared";
+import { billStatusSchema, createAdjustmentSchema, createBillCategorySchema, createBillSchema, createCategorySchema, createChecklistTaskSchema, createHousehelpSchema, createHouseholdSchema, createReminderRuleSchema, dateSchema, generateSettlementSchema, inviteMemberSchema, markAttendanceSchema, markCompletionSchema, markHolidaySchema, markRemainingPresentSchema, monthSchema, moveCategorySchema, notificationActionSchema, occurrenceStatusSchema, putAssignmentsSchema, recordBillPaymentSchema, recordPaymentSchema, updateBillCategorySchema, updateBillSchema, updateCategorySchema, updateChecklistTaskSchema, updateHousehelpSchema, updateHouseholdSchema, updateMemberSchema, updateNotificationPreferenceSchema, updateOccurrenceAmountSchema, updateReminderRuleSchema, updateScheduleSchema, reportTypeSchema, voidReasonSchema, waiveOccurrenceSchema } from "@household/shared";
 import { requireAuth } from "../middleware/auth.js";
 import { requireHousehold } from "../middleware/household.js";
 import { inviteLimiter } from "../middleware/rate-limit.js";
@@ -364,6 +364,11 @@ export function householdRoutes(deps: Deps): Router {
     const parsedMonth = monthSchema.safeParse(req.query.month);
     if (!parsedMonth.success) throw Errors.validation({ month: "Use YYYY-MM" });
     ok(res, await attendance.getMonthAttendance(deps.db, req.membership!.householdId, req.params.id as string, parsedMonth.data));
+  });
+
+  r.post("/:householdId/househelps/:id/attendance/remaining-present", requireHousehold(deps, "attendance.mark"), async (req, res) => {
+    const { month } = parseBody(req, markRemainingPresentSchema);
+    ok(res, await attendance.markRemainingPresent(deps, req.auth!.user.id, req.membership!, req.params.id as string, month, req.ip), 200, "Marked remaining days as present.");
   });
 
   r.get("/:householdId/checklist/today", requireHousehold(deps, "checklists.view"), async (req, res) => {

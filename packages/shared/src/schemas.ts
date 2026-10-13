@@ -124,9 +124,11 @@ export const markAttendanceSchema = z.object({
   note: z.string().trim().max(500).optional(),
 });
 export const markHolidaySchema = z.object({ date: dateSchema });
+export const markRemainingPresentSchema = z.object({ month: monthSchema });
 
 export type MarkAttendanceInput = z.infer<typeof markAttendanceSchema>;
 export type MarkHolidayInput = z.infer<typeof markHolidaySchema>;
+export type MarkRemainingPresentInput = z.infer<typeof markRemainingPresentSchema>;
 
 export const taskFrequencySchema = z.enum(["DAILY", "WEEKLY", "WEEKDAYS", "MONTHLY", "SPECIFIC_DATE", "CUSTOM"]);
 export const taskPrioritySchema = z.enum(["LOW", "NORMAL", "HIGH"]);
