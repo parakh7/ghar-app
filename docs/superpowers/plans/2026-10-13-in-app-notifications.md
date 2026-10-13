@@ -710,7 +710,7 @@ function renderShell(unreadCount: number) {
   return render(
     <QueryClientProvider client={qc}>
       <MemoryRouter initialEntries={["/"]}>
-        <Routes><Route element={<AppShell />}><Route index element={<div>Home</div>} /></Route></Routes>
+        <Routes><Route element={<AppShell />}><Route index element={<div>Home page body</div>} /></Route></Routes>
       </MemoryRouter>
     </QueryClientProvider>,
   );
@@ -727,7 +727,7 @@ describe("AppShell", () => {
 
   it("hides the badge when there are no unread notifications", async () => {
     renderShell(0);
-    await screen.findByText("Home");
+    await screen.findByText("Home page body");
     expect(screen.queryByLabelText(/unread notifications/)).not.toBeInTheDocument();
   });
 });

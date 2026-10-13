@@ -1,6 +1,8 @@
 import { NavLink, Outlet } from "react-router-dom";
-import { ClipboardCheck, Home, MoreHorizontal, ReceiptIndianRupee, Users } from "lucide-react";
+import { Bell, ClipboardCheck, Home, MoreHorizontal, ReceiptIndianRupee, Users } from "lucide-react";
 import { Logo } from "../../components/Logo";
+import { NotificationBadge } from "../notifications/NotificationBadge";
+import { useUnreadCount } from "../notifications/useNotifications";
 import { useActiveHousehold } from "./useActiveHousehold";
 import "./shell.css";
 
@@ -14,6 +16,7 @@ const NAV = [
 
 export function AppShell() {
   const { household } = useActiveHousehold();
+  const unreadCount = useUnreadCount(household?.id).data ?? 0;
   return (
     <div className="shell">
       <a href="#main" className="skip-link">Skip to content</a>
@@ -24,6 +27,10 @@ export function AppShell() {
             <p className="shell__app">Ghar</p>
             {household && <p className="shell__household">{household.name}</p>}
           </div>
+          <NavLink to="/notifications" className="shell__bell" aria-label="Notifications">
+            <Bell size={22} aria-hidden strokeWidth={2} />
+            <NotificationBadge count={unreadCount} />
+          </NavLink>
         </div>
         <ul>
           {NAV.map(({ to, label, icon: Icon, end }) => (

@@ -5,6 +5,8 @@ import { ApiError } from "../../lib/api";
 import { Alert } from "../../components/Alert";
 import { Button } from "../../components/Button";
 import { useSession, useSignOut } from "../auth/session";
+import { NotificationBadge } from "../notifications/NotificationBadge";
+import { useUnreadCount } from "../notifications/useNotifications";
 import { useLeaveHousehold } from "./members/useMembers";
 import { useActiveHousehold } from "./useActiveHousehold";
 
@@ -16,6 +18,7 @@ export function MorePage() {
   const signOut = useSignOut();
   const navigate = useNavigate();
   const leaveHousehold = useLeaveHousehold(household?.id ?? "");
+  const unreadCount = useUnreadCount(household?.id).data ?? 0;
   const [leaveError, setLeaveError] = useState<string | null>(null);
 
   function onLeave() {
@@ -50,6 +53,10 @@ export function MorePage() {
       <div className="list">
         <Link to="/members" className="list__item">
           <span className="list__label">Members</span>
+        </Link>
+        <Link to="/notifications" className="list__item">
+          <span className="list__label">Notifications</span>
+          <NotificationBadge count={unreadCount} />
         </Link>
       </div>
 
