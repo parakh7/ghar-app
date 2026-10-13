@@ -71,7 +71,7 @@ export function HomePage() {
           <section className="card card--enter" style={{ animationDelay: "140ms" }} aria-labelledby="h-pay">
             <h2 className="card__title" id="h-pay">Payments</h2>
             {dashboard.bills.length === 0 ? (
-              <EmptyState icon={<ReceiptIndianRupee size={22} />} title="No bills tracked" text="Keep track of electricity, WiFi, maintenance and more. We'll remind you before they're due." tone="dusk" />
+              <EmptyState icon={<ReceiptIndianRupee size={22} />} title="Nothing due today" text="Bills due today or overdue show up here. Check the Bills page for everything you're tracking." tone="dusk" />
             ) : (
               <div className="list">
                 {dashboard.bills.map((b) => (

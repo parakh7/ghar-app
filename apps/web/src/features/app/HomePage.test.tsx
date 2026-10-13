@@ -51,6 +51,17 @@ describe("HomePage", () => {
     expect(screen.queryByText("Salaries")).not.toBeInTheDocument();
   });
 
+  it("shows a due-today-agnostic empty state for bills, not a 'no bills tracked' message", async () => {
+    renderPage({
+      attendance: { marked: 0, total: 0 },
+      checklist: { done: 0, total: 0, pending: [] },
+      bills: [],
+      salary: { upcoming: null, hasAnySettlement: false },
+    });
+    await screen.findByText("Nothing due today");
+    expect(screen.queryByText(/No bills tracked/)).not.toBeInTheDocument();
+  });
+
   it("shows the all-settled empty state when permitted but nothing is due", async () => {
     renderPage({
       attendance: { marked: 0, total: 0 },
