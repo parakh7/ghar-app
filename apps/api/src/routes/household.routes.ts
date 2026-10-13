@@ -27,6 +27,7 @@ import * as schedules from "../services/schedule.service.js";
 import * as salaryAdjustments from "../services/salary-adjustment.service.js";
 import * as salaryPayments from "../services/salary-payment.service.js";
 import * as salarySettlements from "../services/salary-settlement.service.js";
+import * as today from "../services/today.service.js";
 
 /**
  * Household-scoped resources live under /api/households/:householdId/…
@@ -476,6 +477,10 @@ export function householdRoutes(deps: Deps): Router {
   r.patch("/:householdId/notification-preferences/:category", requireHousehold(deps, "household.view"), async (req, res) => {
     const input = parseBody(req, updateNotificationPreferenceSchema);
     ok(res, await notificationPreferencesService.updateNotificationPreference(deps, req.auth!.user.id, req.membership!, req.params.category as string, input));
+  });
+
+  r.get("/:householdId/today", requireHousehold(deps, "household.view"), async (req, res) => {
+    ok(res, await today.getTodayDashboard(deps, req.membership!));
   });
 
   return r;

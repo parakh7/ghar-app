@@ -129,3 +129,22 @@ export type SettableNotificationCategory = "BILL" | "SALARY";
 export type NotificationPreferenceDTO = {
   category: SettableNotificationCategory; enabled: boolean; emailEnabled: boolean;
 };
+
+export type TodayAttendanceSummaryDTO = { marked: number; total: number };
+export type TodayChecklistSummaryDTO = { done: number; total: number; pending: string[] };
+export type TodayBillDTO = {
+  occurrenceId: string; billId: string; billName: string;
+  amountDuePaise: number; dueDate: string; isOverdue: boolean;
+};
+export type TodaySalaryDTO = {
+  settlementId: string; househelpName: string; periodMonth: string;
+  dueDate: string; netDuePaise: number; status: SettlementStatus;
+};
+export type TodaySalarySectionDTO = { upcoming: TodaySalaryDTO | null; hasAnySettlement: boolean };
+
+export type TodayDashboardDTO = {
+  attendance?: TodayAttendanceSummaryDTO;
+  checklist?: TodayChecklistSummaryDTO;
+  bills?: TodayBillDTO[];
+  salary?: TodaySalarySectionDTO;
+};
