@@ -62,6 +62,7 @@ export function HousehelpDetailPage() {
           <Button variant="secondary" block onClick={() => navigate(`/househelps/${id}/edit`)}>Edit details</Button>
           <Button variant="secondary" block onClick={() => navigate(`/househelps/${id}/schedule`)}>Set schedule</Button>
           <Button variant="secondary" block onClick={() => navigate(`/househelps/${id}/attendance`)}>View attendance</Button>
+          <Button variant="secondary" block onClick={() => navigate("/salary")}>View salary</Button>
           {h.archivedAt ? (
             <Button variant="secondary" block loading={unarchive.isPending} onClick={() => unarchive.mutate(id!, { onError: (err) => setPageError(messageFrom(err)) })}>Restore</Button>
           ) : (
