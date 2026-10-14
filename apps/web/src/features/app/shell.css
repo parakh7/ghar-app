@@ -92,6 +92,7 @@
 
   .shell--collapsed { grid-template-columns: 76px 1fr; }
   .shell--collapsed .shell__sidebar { width: 76px; padding-left: var(--space-2); padding-right: var(--space-2); }
+  .shell--collapsed .shell__sidebar-head { flex-direction: column; gap: var(--space-2); padding-left: 0; padding-right: 0; }
   .shell--collapsed .shell__app,
   .shell--collapsed .shell__switcher-label,
   .shell--collapsed .shell__switcher-name,
@@ -99,7 +100,9 @@
   .shell--collapsed .nav-item span,
   .shell--collapsed .shell__profile-text,
   .shell--collapsed .shell__search { display: none; }
-  .shell--collapsed .shell__switcher-trigger { justify-content: center; }
+  .shell--collapsed .shell__switcher-trigger { justify-content: center; padding: 0; }
+  .shell--collapsed .nav-item { justify-content: center; padding-left: 0; padding-right: 0; gap: 0; }
+  .shell--collapsed .shell__profile { justify-content: center; padding-left: 0; padding-right: 0; }
 }
 
 /* page scaffolding — used across most pages, not shell-specific */
@@ -112,22 +115,18 @@
   .home-grid { grid-template-columns: repeat(2, 1fr); gap: var(--space-5); }
 }
 
-/* home "today" header — flat coral (the one filled-accent surface per view) */
-.today {
-  display: grid; gap: var(--space-2); margin-bottom: var(--space-8);
-  background: var(--coral); color: var(--coral-ink);
-  border-radius: var(--radius-lg); padding: var(--space-6) var(--space-5);
-  box-shadow: var(--shadow-hero);
-}
-.today__greet { color: color-mix(in srgb, var(--coral-ink) 75%, transparent); font-weight: 500; }
-.today__date { font-size: var(--text-3xl); font-weight: 700; letter-spacing: -0.01em; line-height: 1.08; text-wrap: balance; }
-.today__date mark { background: none; color: inherit; box-shadow: inset 0 -0.28em 0 color-mix(in srgb, var(--coral-ink) 30%, transparent); padding: 0 0.04em; }
+/* home "today" header — plain, matches the Ghar redesign mockup (no filled block; Task 5 replaces
+   this with the full greeting/overview header, this is a stopgap so it doesn't look broken meanwhile). */
+.today { display: grid; gap: var(--space-2); margin-bottom: var(--space-8); }
+.today__greet { color: var(--text-2); font-weight: 500; }
+.today__date { font-size: var(--text-3xl); font-weight: 700; letter-spacing: -0.01em; line-height: 1.08; text-wrap: balance; color: var(--text); }
+.today__date mark { background: none; color: inherit; box-shadow: none; padding: 0; }
 .today__stamp {
   display: inline-flex; align-items: center; gap: 6px; font-size: var(--text-sm); font-weight: 700;
-  color: var(--coral-ink); background: color-mix(in srgb, var(--coral-ink) 12%, transparent);
+  color: var(--text-2); background: var(--chip);
   padding: var(--space-1) var(--space-3) var(--space-1) var(--space-2); border-radius: 999px; width: fit-content;
 }
-.today__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--coral-ink); }
+.today__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--coral); }
 
 /* chips */
 .chips { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: calc(-1 * var(--space-2)); }
