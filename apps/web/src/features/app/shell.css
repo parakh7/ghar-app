@@ -101,6 +101,7 @@
   .shell--collapsed .shell__profile-text,
   .shell--collapsed .shell__search { display: none; }
   .shell--collapsed .shell__switcher-trigger { justify-content: center; padding: 0; }
+  .shell--collapsed .shell__switcher-panel { left: 0; right: auto; width: 200px; }
   .shell--collapsed .nav-item { justify-content: center; padding-left: 0; padding-right: 0; gap: 0; }
   .shell--collapsed .shell__profile { justify-content: center; padding-left: 0; padding-right: 0; }
 }
