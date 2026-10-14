@@ -72,6 +72,33 @@ describe("attendance — today marking", () => {
     expect(rows).toHaveLength(1);
   });
 
+  it("a repeated clientMutationId returns the original row without a second audit entry", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    const help = await createHousehelp(ctx, owner.cookie, h.id);
+    const first = await ctx.request.put(`/api/households/${h.id}/attendance/${help.id}`).set(csrf).set("cookie", owner.cookie)
+      .send({ date: "2026-09-28", status: "ABSENT", clientMutationId: "11111111-1111-4111-8111-111111111111" });
+    expect(first.status).toBe(200);
+    const replay = await ctx.request.put(`/api/households/${h.id}/attendance/${help.id}`).set(csrf).set("cookie", owner.cookie)
+      .send({ date: "2026-09-28", status: "PRESENT", clientMutationId: "11111111-1111-4111-8111-111111111111" });
+    expect(replay.status).toBe(200);
+    expect(replay.body.data).toEqual(first.body.data);
+    const logs = await ctx.db.select().from(auditLogs).where(and(eq(auditLogs.householdId, h.id), eq(auditLogs.action, "attendance.corrected")));
+    expect(logs).toHaveLength(1);
+  });
+
+  it("a different clientMutationId for the same date still upserts normally (last write wins)", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    const help = await createHousehelp(ctx, owner.cookie, h.id);
+    await ctx.request.put(`/api/households/${h.id}/attendance/${help.id}`).set(csrf).set("cookie", owner.cookie)
+      .send({ date: "2026-09-28", status: "ABSENT", clientMutationId: "22222222-2222-4222-8222-222222222222" });
+    const second = await ctx.request.put(`/api/households/${h.id}/attendance/${help.id}`).set(csrf).set("cookie", owner.cookie)
+      .send({ date: "2026-09-28", status: "PRESENT", clientMutationId: "33333333-3333-4333-8333-333333333333" });
+    expect(second.status).toBe(200);
+    expect(second.body.data.status).toBe("PRESENT");
+  });
+
   it("rejects marking a future date", async () => {
     const owner = await signupUser(ctx);
     const h = await createHousehold(ctx, owner.cookie);

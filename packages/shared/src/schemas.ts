@@ -124,6 +124,7 @@ export const markAttendanceSchema = z.object({
   date: dateSchema,
   status: attendanceStatusSchema,
   note: z.string().trim().max(500).optional(),
+  clientMutationId: z.string().uuid().optional(),
 });
 export const markHolidaySchema = z.object({ date: dateSchema });
 export const markRemainingPresentSchema = z.object({ month: monthSchema });
@@ -220,6 +221,7 @@ export const markCompletionSchema = z.object({
   date: dateSchema,
   status: z.enum(["COMPLETED", "SKIPPED"]),
   note: z.string().trim().max(500).optional(),
+  clientMutationId: z.string().uuid().optional(),
 });
 
 export type CreateChecklistTaskInput = z.input<typeof createChecklistTaskSchema>;

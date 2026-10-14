@@ -77,6 +77,12 @@ export async function markCompletion(
   const note = input.note ?? null;
   const isCorrection = input.date !== today;
 
+  if (input.clientMutationId) {
+    const [already] = await deps.db.select().from(checklistCompletions)
+      .where(and(eq(checklistCompletions.householdId, membership.householdId), eq(checklistCompletions.clientMutationId, input.clientMutationId)));
+    if (already) return toRecordDTO(already);
+  }
+
   const row = await deps.db.transaction(async (tx) => {
     const [before] = isCorrection
       ? await tx.select({ status: checklistCompletions.status, note: checklistCompletions.note }).from(checklistCompletions)
@@ -85,10 +91,10 @@ export async function markCompletion(
     const now = deps.clock.now();
     const [inserted] = await tx.insert(checklistCompletions).values({
       householdId: membership.householdId, taskId, househelpId: null, date: input.date, status: input.status, note,
-      recordedByUserId: actorUserId, recordedAt: now,
+      recordedByUserId: actorUserId, recordedAt: now, clientMutationId: input.clientMutationId ?? null,
     }).onConflictDoUpdate({
       target: [checklistCompletions.taskId, checklistCompletions.date],
-      set: { status: input.status, note, househelpId: null, recordedByUserId: actorUserId, recordedAt: now },
+      set: { status: input.status, note, househelpId: null, recordedByUserId: actorUserId, recordedAt: now, clientMutationId: input.clientMutationId ?? null },
     }).returning();
     if (isCorrection) {
       await recordAudit(tx, {

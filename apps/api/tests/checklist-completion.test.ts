@@ -69,6 +69,33 @@ describe("checklist completion — today marking", () => {
     expect(rows[0]!.househelpId).toBeNull();
   });
 
+  it("a repeated clientMutationId returns the original row without a second audit entry", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    const task = await createTask(ctx, owner.cookie, h.id);
+    const first = await ctx.request.put(`/api/households/${h.id}/checklist/${task.id}/completion`).set(csrf).set("cookie", owner.cookie)
+      .send({ date: "2026-09-28", status: "SKIPPED", clientMutationId: "44444444-4444-4444-8444-444444444444" });
+    expect(first.status).toBe(200);
+    const replay = await ctx.request.put(`/api/households/${h.id}/checklist/${task.id}/completion`).set(csrf).set("cookie", owner.cookie)
+      .send({ date: "2026-09-28", status: "COMPLETED", clientMutationId: "44444444-4444-4444-8444-444444444444" });
+    expect(replay.status).toBe(200);
+    expect(replay.body.data).toEqual(first.body.data);
+    const logs = await ctx.db.select().from(auditLogs).where(and(eq(auditLogs.householdId, h.id), eq(auditLogs.action, "checklist.completionCorrected")));
+    expect(logs).toHaveLength(1);
+  });
+
+  it("a different clientMutationId for the same date still upserts normally (last write wins)", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    const task = await createTask(ctx, owner.cookie, h.id);
+    await ctx.request.put(`/api/households/${h.id}/checklist/${task.id}/completion`).set(csrf).set("cookie", owner.cookie)
+      .send({ date: "2026-09-28", status: "SKIPPED", clientMutationId: "55555555-5555-4555-8555-555555555555" });
+    const second = await ctx.request.put(`/api/households/${h.id}/checklist/${task.id}/completion`).set(csrf).set("cookie", owner.cookie)
+      .send({ date: "2026-09-28", status: "COMPLETED", clientMutationId: "66666666-6666-4666-8666-666666666666" });
+    expect(second.status).toBe(200);
+    expect(second.body.data.status).toBe("COMPLETED");
+  });
+
   it("reflects a mark in today's list", async () => {
     const owner = await signupUser(ctx);
     const h = await createHousehold(ctx, owner.cookie);

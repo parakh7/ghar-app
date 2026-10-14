@@ -81,6 +81,12 @@ export async function setAttendance(
   const note = input.note ?? null;
   const isCorrection = input.date !== today;
 
+  if (input.clientMutationId) {
+    const [already] = await deps.db.select().from(attendanceRecords)
+      .where(and(eq(attendanceRecords.householdId, membership.householdId), eq(attendanceRecords.clientMutationId, input.clientMutationId)));
+    if (already) return toRecordDTO(already);
+  }
+
   const row = await deps.db.transaction(async (tx) => {
     const [before] = isCorrection
       ? await tx.select({ status: attendanceRecords.status, note: attendanceRecords.note }).from(attendanceRecords)
@@ -89,10 +95,10 @@ export async function setAttendance(
     const now = deps.clock.now();
     const [inserted] = await tx.insert(attendanceRecords).values({
       householdId: membership.householdId, househelpId, date: input.date, status: input.status, note,
-      markedByUserId: actorUserId, markedAt: now,
+      markedByUserId: actorUserId, markedAt: now, clientMutationId: input.clientMutationId ?? null,
     }).onConflictDoUpdate({
       target: [attendanceRecords.househelpId, attendanceRecords.date],
-      set: { status: input.status, note, markedByUserId: actorUserId, markedAt: now },
+      set: { status: input.status, note, markedByUserId: actorUserId, markedAt: now, clientMutationId: input.clientMutationId ?? null },
     }).returning();
     if (isCorrection) {
       await recordAudit(tx, {
