@@ -93,7 +93,9 @@ describe("TodayPage", () => {
     renderPage();
     const row = await screen.findByText("Sunita");
     await userEvent.click(row);
-    expect(await screen.findByLabelText("Not yet synced")).toBeInTheDocument();
+    const indicator = await screen.findByLabelText("Not yet synced");
+    expect(indicator.closest(".badge")?.textContent).toContain("Present");
+    expect(document.querySelectorAll(".badge--muted")).toHaveLength(0);
   });
 
   it("hides marking controls for a VIEWER", async () => {

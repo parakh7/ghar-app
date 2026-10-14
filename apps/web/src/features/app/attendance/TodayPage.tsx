@@ -100,10 +100,10 @@ export function TodayPage() {
                 onAnimationEnd={() => setPoppedId((id) => (id === e.househelpId ? null : id))}
               >
                 {e.status ? STATUS_LABEL[e.status] : "Not marked"}
+                {pendingKeys.has(`attendance:${e.househelpId}:${date}`) && (
+                  <span aria-label="Not yet synced" title="Will sync when you're back online"> ⏳</span>
+                )}
               </span>
-              {pendingKeys.has(`attendance:${e.househelpId}:${date}`) && (
-                <span className="badge badge--muted" aria-label="Not yet synced" title="Will sync when you're back online">⏳</span>
-              )}
               {canMark && <Button variant="ghost" onClick={() => setOpenFor(openFor === e.househelpId ? null : e.househelpId)}>More</Button>}
             </div>
             {openFor === e.househelpId && (

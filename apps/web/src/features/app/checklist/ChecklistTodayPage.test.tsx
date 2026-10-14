@@ -127,6 +127,8 @@ describe("ChecklistTodayPage", () => {
     renderPage();
     const row = await screen.findByText("Wash dishes");
     await userEvent.click(row);
-    expect(await screen.findByLabelText("Not yet synced")).toBeInTheDocument();
+    const indicator = await screen.findByLabelText("Not yet synced");
+    expect(indicator.closest(".badge")?.textContent).toContain("Done");
+    expect(document.querySelectorAll(".badge--muted")).toHaveLength(0);
   });
 });

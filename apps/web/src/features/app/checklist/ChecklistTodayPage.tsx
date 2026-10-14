@@ -137,10 +137,10 @@ export function ChecklistTodayPage() {
                 onClick={() => onClearBadge(e.taskId, e.status)}
               >
                 {labelOf(e.status)}
+                {pendingKeys.has(`checklist:${e.taskId}:${date}`) && (
+                  <span aria-label="Not yet synced" title="Will sync when you're back online"> ⏳</span>
+                )}
               </button>
-              {pendingKeys.has(`checklist:${e.taskId}:${date}`) && (
-                <span className="badge badge--muted" aria-label="Not yet synced" title="Will sync when you're back online">⏳</span>
-              )}
               {canMark && <Button variant="ghost" onClick={() => setOpenFor(openFor === e.taskId ? null : e.taskId)}>More</Button>}
             </div>
             {openFor === e.taskId && (

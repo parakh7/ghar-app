@@ -23,7 +23,8 @@ export function useSetAttendance(householdId: string) {
   return useMutation({
     mutationFn: async ({ househelpId, body }: { househelpId: string; body: MarkAttendanceInput }) => {
       try {
-        return await put<AttendanceRecordDTO>(`/households/${householdId}/attendance/${househelpId}`, body);
+        const result = await put<AttendanceRecordDTO>(`/households/${householdId}/attendance/${househelpId}`, body);
+        return { ...result, queued: false };
       } catch (err) {
         if (!(err instanceof ApiError) || err.code !== "NETWORK_ERROR") throw err;
         const clientMutationId = crypto.randomUUID();
@@ -37,10 +38,13 @@ export function useSetAttendance(householdId: string) {
         const optimistic: AttendanceRecordDTO = { date: body.date, status: body.status, note: body.note ?? null };
         qc.setQueryData(["attendance", "today", householdId], (old: TodayAttendanceDTO | undefined) =>
           old ? { ...old, entries: old.entries.map((e) => (e.househelpId === househelpId ? { ...e, status: optimistic.status, note: optimistic.note } : e)) } : old);
-        return { data: optimistic, message: null };
+        return { data: optimistic, message: null, queued: true };
       }
     },
-    onSuccess: (_data, { househelpId }) => invalidateAttendance(qc, householdId, househelpId),
+    // Skip invalidation for a queued (not actually synced) write — a background refetch here
+    // could succeed against stale server data and silently overwrite the optimistic update
+    // before the queued mutation has actually replayed.
+    onSuccess: (result, { househelpId }) => { if (!result.queued) void invalidateAttendance(qc, householdId, househelpId); },
   });
 }
 

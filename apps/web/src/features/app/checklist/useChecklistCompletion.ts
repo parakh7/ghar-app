@@ -22,7 +22,8 @@ export function useMarkCompletion(householdId: string) {
   return useMutation({
     mutationFn: async ({ taskId, body }: { taskId: string; body: MarkCompletionInput }) => {
       try {
-        return await put<ChecklistCompletionRecordDTO>(`/households/${householdId}/checklist/${taskId}/completion`, body);
+        const result = await put<ChecklistCompletionRecordDTO>(`/households/${householdId}/checklist/${taskId}/completion`, body);
+        return { ...result, queued: false };
       } catch (err) {
         if (!(err instanceof ApiError) || err.code !== "NETWORK_ERROR") throw err;
         const clientMutationId = crypto.randomUUID();
@@ -36,10 +37,13 @@ export function useMarkCompletion(householdId: string) {
         const optimistic: ChecklistCompletionRecordDTO = { date: body.date, status: body.status, note: body.note ?? null };
         qc.setQueryData(["checklist", "today", householdId], (old: TodayChecklistDTO | undefined) =>
           old ? { ...old, entries: old.entries.map((e) => (e.taskId === taskId ? { ...e, status: optimistic.status, note: optimistic.note } : e)) } : old);
-        return { data: optimistic, message: null };
+        return { data: optimistic, message: null, queued: true };
       }
     },
-    onSuccess: () => invalidateChecklist(qc, householdId),
+    // Skip invalidation for a queued (not actually synced) write — a background refetch here
+    // could succeed against stale server data and silently overwrite the optimistic update
+    // before the queued mutation has actually replayed.
+    onSuccess: (result) => { if (!result.queued) void invalidateChecklist(qc, householdId); },
   });
 }
 
