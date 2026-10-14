@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Wallet } from "lucide-react";
 import type { HousehelpDTO } from "@household/shared";
 import { dateInZone, formatINR, generateSettlementSchema } from "@household/shared";
@@ -65,6 +65,8 @@ export function SalaryListPage() {
   const householdId = active?.id;
   const householdQuery = useHousehold(householdId);
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const deepLinkedHousehelpId = searchParams.get("househelpId") ?? "";
   const househelpsQuery = useHousehelps(householdId, false);
   const generateSettlement = useGenerateSettlement(householdId ?? "");
   const canManage = householdQuery.data?.permissions.includes("salaries.manage") ?? false;
@@ -74,7 +76,7 @@ export function SalaryListPage() {
   const househelps = househelpsQuery.data ?? [];
   const defaultMonth = previousMonth(dateInZone(new Date(), active?.timezone ?? "Asia/Kolkata").slice(0, 7));
   const [form, setForm] = useState({ househelpId: "", month: defaultMonth });
-  const selectedHousehelpId = form.househelpId || househelps[0]?.id || "";
+  const selectedHousehelpId = form.househelpId || deepLinkedHousehelpId || househelps[0]?.id || "";
 
   if (!householdId) return null;
 

@@ -19,10 +19,10 @@ function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 }
 
-function renderPage() {
+function renderPage(initialEntry = "/salary") {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   qc.setQueryData(meKey, { user: { id: "u1", name: "Parakh", email: "p@example.com", emailVerified: true, createdAt: "2026-01-01T00:00:00.000Z" }, households: [HOUSEHOLD] });
-  return render(<QueryClientProvider client={qc}><MemoryRouter><SalaryListPage /></MemoryRouter></QueryClientProvider>);
+  return render(<QueryClientProvider client={qc}><MemoryRouter initialEntries={[initialEntry]}><SalaryListPage /></MemoryRouter></QueryClientProvider>);
 }
 
 describe("SalaryListPage", () => {
@@ -65,6 +65,20 @@ describe("SalaryListPage", () => {
       const body = JSON.parse((postCall![1] as RequestInit).body as string);
       expect(body).toEqual({ periodMonth: "2026-11-01" });
     });
+  });
+
+  it("pre-selects the househelp named in a ?househelpId= deep link, not just the first one", async () => {
+    const RAMESH = { ...SUNITA, id: "hh2", name: "Ramesh" };
+    vi.spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/households/h1")) return jsonResponse({ success: true, data: { ...HOUSEHOLD, permissions: ["salaries.view", "salaries.manage"] }, message: null });
+      if (url.endsWith("/households/h1/househelps")) return jsonResponse({ success: true, data: [SUNITA, RAMESH], message: null });
+      if (url.endsWith("/salary/settlements")) return jsonResponse({ success: true, data: [], message: null });
+      throw new Error(`unexpected fetch ${url}`);
+    }) as typeof fetch);
+    renderPage("/salary?househelpId=hh2");
+    await screen.findByRole("heading", { name: "Sunita" });
+    expect(screen.getByLabelText("Househelp")).toHaveValue("hh2");
   });
 
   it("shows the specific field reason from a validation error, not the generic top-level message", async () => {
