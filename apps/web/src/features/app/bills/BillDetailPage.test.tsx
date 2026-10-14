@@ -309,4 +309,28 @@ describe("BillDetailPage", () => {
     expect(screen.queryByRole("button", { name: "Waive" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Unwaive" })).not.toBeInTheDocument();
   });
+
+  it("truncates long bill notes and the combined payment line with a title tooltip", async () => {
+    const LONG_NOTE = "Call the provider before the 5th if the smart meter reading looks unusually high this month";
+    vi.spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/households/h1")) return jsonResponse({ success: true, data: { ...HOUSEHOLD, permissions: ["bills.view", "bills.manage"] }, message: null });
+      if (url.endsWith("/bill-categories")) return jsonResponse({ success: true, data: [], message: null });
+      if (url.endsWith("/bills/b1")) return jsonResponse({ success: true, data: { ...ACTIVE_BILL, notes: LONG_NOTE }, message: null });
+      if (init?.method === "POST" && url.endsWith("/bills/b1/occurrences/sync")) return jsonResponse({ success: true, data: [PENDING_OCCURRENCE], message: null });
+      if (url.endsWith("/bills/b1/occurrences")) return jsonResponse({ success: true, data: [PENDING_OCCURRENCE], message: null });
+      if (init?.method === "GET" && url.endsWith("/occurrences/occ1/payments")) {
+        return jsonResponse({ success: true, data: [{ ...ACTIVE_PAYMENT, transactionRef: "UPI-REF-00123456789", notes: LONG_NOTE }], message: null });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    }) as typeof fetch);
+    renderPage();
+    const noteEl = await screen.findByText(LONG_NOTE);
+    expect(noteEl).toHaveClass("list__meta--truncate");
+    expect(noteEl).toHaveAttribute("title", LONG_NOTE);
+    const expectedPaymentLine = `2026-10-05 · UPI-REF-00123456789 · ${LONG_NOTE}`;
+    const paymentLineEl = await screen.findByText(expectedPaymentLine);
+    expect(paymentLineEl).toHaveClass("list__meta--truncate");
+    expect(paymentLineEl).toHaveAttribute("title", expectedPaymentLine);
+  });
 });

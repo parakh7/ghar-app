@@ -61,7 +61,7 @@ export function MembersPage() {
           <div key={m.userId} className="list__item">
             <span className="list__text">
               <span className="list__label" style={{ display: "block" }}>{m.displayName || m.name}</span>
-              <span className="list__meta">{m.email}</span>
+              <span className="list__meta list__meta--truncate" title={m.email}>{m.email}</span>
             </span>
             {canManage ? (
               <span style={{ display: "flex", alignItems: "center", gap: "var(--space-2)" }}>
@@ -97,7 +97,7 @@ export function MembersPage() {
             {invitesQuery.data?.map((inv) => (
               <div key={inv.id} className="list__item">
                 <span className="list__text">
-                  <span className="list__label" style={{ display: "block" }}>{inv.email}</span>
+                  <span className="list__label list__meta--truncate" style={{ display: "block" }} title={inv.email}>{inv.email}</span>
                   <span className="list__meta">Invited as {ROLE_LABEL[inv.role]}</span>
                 </span>
                 <span style={{ display: "flex", gap: "var(--space-2)" }}>

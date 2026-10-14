@@ -91,4 +91,13 @@ describe("MembersPage", () => {
     const patchCall = fetchSpy.mock.calls.find(([, init]) => (init as RequestInit | undefined)?.method === "PATCH");
     expect(JSON.parse((patchCall![1] as RequestInit).body as string)).toEqual({ role: "ADMIN" });
   });
+
+  it("truncates long member and invite emails with a title tooltip carrying the full text", async () => {
+    const LONG_EMAIL = "riya.very.long.email.address.for.testing@example-household.com";
+    mockFetch(["members.view", "members.manage"], { members: [MEMBERS[0]!, { ...MEMBERS[1]!, email: LONG_EMAIL }] });
+    renderPage();
+    const emailEl = await screen.findByText(LONG_EMAIL);
+    expect(emailEl).toHaveClass("list__meta--truncate");
+    expect(emailEl).toHaveAttribute("title", LONG_EMAIL);
+  });
 });

@@ -179,7 +179,7 @@ function OccurrenceRow({
                 <span className="list__label" style={{ display: "block" }}>
                   {formatINR(p.amountPaise)} · {PAYMENT_METHOD_OPTIONS.find((m) => m.value === p.method)?.label ?? p.method}{p.voidedAt && " (voided)"}
                 </span>
-                <span className="list__meta">{p.paidOn}{p.transactionRef && ` · ${p.transactionRef}`}{p.notes && ` · ${p.notes}`}</span>
+                <span className="list__meta list__meta--truncate" title={`${p.paidOn}${p.transactionRef ? ` · ${p.transactionRef}` : ""}${p.notes ? ` · ${p.notes}` : ""}`}>{p.paidOn}{p.transactionRef && ` · ${p.transactionRef}`}{p.notes && ` · ${p.notes}`}</span>
               </span>
               {canRecordPayment && !p.voidedAt && (
                 <Button variant="ghost" loading={voidPayment.isPending} onClick={() => onVoidPayment(p.id)}>Void</Button>
@@ -285,7 +285,7 @@ export function BillDetailPage() {
         <div className="list__item"><span className="list__text"><span className="list__label" style={{ display: "block" }}>End date</span><span className="list__meta">{b.endDate ?? "—"}</span></span></div>
         <div className="list__item"><span className="list__text"><span className="list__label" style={{ display: "block" }}>Payment method</span><span className="list__meta">{b.paymentMethod ?? "—"}</span></span></div>
         <div className="list__item"><span className="list__text"><span className="list__label" style={{ display: "block" }}>Autopay</span><span className="list__meta">{b.autopay ? "On" : "Off"}</span></span></div>
-        {b.notes && <div className="list__item"><span className="list__text"><span className="list__label" style={{ display: "block" }}>Notes</span><span className="list__meta">{b.notes}</span></span></div>}
+        {b.notes && <div className="list__item"><span className="list__text"><span className="list__label" style={{ display: "block" }}>Notes</span><span className="list__meta list__meta--truncate" title={b.notes}>{b.notes}</span></span></div>}
       </div>
 
       <h2 className="section-title">Occurrences</h2>
