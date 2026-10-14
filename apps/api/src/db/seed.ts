@@ -6,6 +6,7 @@
  */
 import { and, eq } from "drizzle-orm";
 import { loadEnv } from "../config/env.js";
+import { MemoryErrorReporter } from "../lib/error-reporter.js";
 import { systemClock } from "../lib/clock.js";
 import { createLogger } from "../lib/logger.js";
 import { hashPassword } from "../lib/password.js";
@@ -23,8 +24,9 @@ async function main() {
   const logger = createLogger(env);
   const pool = createPool(env.DATABASE_URL);
   const db = createDb(pool);
-  // Seeding never touches the job queue, so a FakeQueue satisfies Deps without needing Redis.
-  const deps = { env, db, logger, clock: systemClock, email: new ConsoleEmailProvider(logger), queue: new FakeQueue() };
+  // Seeding never touches the job queue or error-handling middleware, so a FakeQueue and
+  // MemoryErrorReporter satisfy Deps without needing Redis or a real reporter.
+  const deps = { env, db, logger, clock: systemClock, email: new ConsoleEmailProvider(logger), queue: new FakeQueue(), errorReporter: new MemoryErrorReporter() };
 
   const existing = await db.select({ id: users.id }).from(users).where(eq(users.email, "parakh@example.com")).limit(1);
   if (existing.length) {

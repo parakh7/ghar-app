@@ -4,6 +4,7 @@ import { loadEnv } from "../config/env.js";
 import { createDb, createPool } from "../db/client.js";
 import { auditLogs } from "../db/schema.js";
 import type { Clock } from "../lib/clock.js";
+import { MemoryErrorReporter } from "../lib/error-reporter.js";
 import { createLogger } from "../lib/logger.js";
 import { FakeQueue } from "../lib/queue.js";
 import { MemoryEmailProvider } from "../services/email/email.provider.js";
@@ -25,7 +26,7 @@ const env = loadEnv({ NODE_ENV: "test", DATABASE_URL: TEST_DB_URL, LOG_LEVEL: "s
 const pool = createPool(env.DATABASE_URL, 5);
 const db = createDb(pool);
 const clock = new FakeClock();
-const deps: Deps = { env, db, logger: createLogger(env), clock, email: new MemoryEmailProvider(), queue: new FakeQueue() };
+const deps: Deps = { env, db, logger: createLogger(env), clock, email: new MemoryEmailProvider(), queue: new FakeQueue(), errorReporter: new MemoryErrorReporter() };
 
 beforeEach(async () => {
   await db.delete(auditLogs);

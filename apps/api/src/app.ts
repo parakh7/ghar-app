@@ -48,6 +48,6 @@ export function createApp(deps: Deps): Express {
   app.use("/api/invites", inviteRoutes(deps));
 
   app.use(notFoundHandler);
-  app.use(errorHandler(deps.logger));
+  app.use(errorHandler(deps.logger, deps.errorReporter));
   return app;
 }

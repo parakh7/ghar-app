@@ -4,6 +4,7 @@ import { CSRF_HEADER, CSRF_HEADER_VALUE } from "@household/shared";
 import { createApp } from "../src/app.js";
 import { loadEnv, type Env } from "../src/config/env.js";
 import { createDb, createPool, type Database } from "../src/db/client.js";
+import { MemoryErrorReporter } from "../src/lib/error-reporter.js";
 import { createLogger } from "../src/lib/logger.js";
 import { FakeQueue } from "../src/lib/queue.js";
 import { MemoryEmailProvider } from "../src/services/email/email.provider.js";
@@ -26,6 +27,7 @@ export type TestContext = {
   email: MemoryEmailProvider;
   clock: FakeClock;
   queue: FakeQueue;
+  errorReporter: MemoryErrorReporter;
   request: ReturnType<typeof supertest>;
   close: () => Promise<void>;
 };
@@ -37,9 +39,10 @@ export function createTestContext(envOverrides: Partial<Record<keyof Env, string
   const email = new MemoryEmailProvider();
   const clock = new FakeClock();
   const queue = new FakeQueue();
-  const deps: Deps = { env, db, logger: createLogger(env), clock, email, queue };
+  const errorReporter = new MemoryErrorReporter();
+  const deps: Deps = { env, db, logger: createLogger(env), clock, email, queue, errorReporter };
   const app = createApp(deps);
-  return { deps, db, email, clock, queue, request: supertest(app), close: () => pool.end() };
+  return { deps, db, email, clock, queue, errorReporter, request: supertest(app), close: () => pool.end() };
 }
 
 export async function truncateAll(db: Database) {

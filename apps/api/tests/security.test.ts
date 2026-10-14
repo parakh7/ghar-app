@@ -62,6 +62,30 @@ describe("hardening", () => {
     const res = await ctx.request.get("/api/health/ready");
     expect(res.body.data).toEqual({ status: "ok", db: "ok" });
   });
+
+  it("reports a genuinely unhandled error to the error reporter", async () => {
+    const { errorHandler } = await import("../src/middleware/error.js");
+    const { MemoryErrorReporter } = await import("../src/lib/error-reporter.js");
+    const reporter = new MemoryErrorReporter();
+    const handler = errorHandler(ctx.deps.logger, reporter);
+    const req = { requestId: "req-1", path: "/api/whatever" } as never;
+    const res = { status: () => res, json: () => res } as never;
+    handler(new Error("boom"), req, res, (() => {}) as never);
+    expect(reporter.reported).toHaveLength(1);
+    expect(reporter.reported[0]?.context).toEqual({ reqId: "req-1", path: "/api/whatever" });
+  });
+
+  it("does not report an AppError (expected 4xx) to the error reporter", async () => {
+    const { errorHandler } = await import("../src/middleware/error.js");
+    const { MemoryErrorReporter } = await import("../src/lib/error-reporter.js");
+    const { Errors } = await import("../src/lib/errors.js");
+    const reporter = new MemoryErrorReporter();
+    const handler = errorHandler(ctx.deps.logger, reporter);
+    const req = { requestId: "req-2", path: "/api/whatever" } as never;
+    const res = { status: () => res, json: () => res } as never;
+    handler(Errors.validation({ field: "bad" }), req, res, (() => {}) as never);
+    expect(reporter.reported).toHaveLength(0);
+  });
 });
 
 describe("rate limiting", () => {
