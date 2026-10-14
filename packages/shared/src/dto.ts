@@ -43,7 +43,7 @@ export type HousehelpDTO = {
   status: "ACTIVE" | "INACTIVE"; startDate: string | null; endDate: string | null;
   salaryMode: "FIXED_MONTHLY" | "ATTENDANCE_BASED" | "DAILY_RATE";
   monthlySalaryPaise: number | null; dailyRatePaise: number | null; halfDayRatePaise: number | null;
-  salaryDueDay: number; notes: string | null; archivedAt: string | null;
+  salaryDueDay: number; allowedLeavesPerMonth: number; notes: string | null; archivedAt: string | null;
   categoryIds: string[]; createdAt: string;
 };
 

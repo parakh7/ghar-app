@@ -1,0 +1,2 @@
+ALTER TABLE "househelps" ADD COLUMN "allowed_leaves_per_month" smallint DEFAULT 0 NOT NULL;--> statement-breakpoint
+ALTER TABLE "househelps" ADD CONSTRAINT "househelps_allowed_leaves_ck" CHECK ("househelps"."allowed_leaves_per_month" between 0 and 31);

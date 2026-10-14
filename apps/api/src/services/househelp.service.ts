@@ -13,7 +13,7 @@ function toHousehelpDTO(row: HousehelpRow, categoryIds: string[]): HousehelpDTO 
     id: row.id, name: row.name, phone: row.phone, roleTitle: row.roleTitle,
     status: row.status, startDate: row.startDate, endDate: row.endDate, salaryMode: row.salaryMode,
     monthlySalaryPaise: row.monthlySalaryPaise, dailyRatePaise: row.dailyRatePaise, halfDayRatePaise: row.halfDayRatePaise,
-    salaryDueDay: row.salaryDueDay, notes: row.notes, archivedAt: row.archivedAt ? row.archivedAt.toISOString() : null,
+    salaryDueDay: row.salaryDueDay, allowedLeavesPerMonth: row.allowedLeavesPerMonth, notes: row.notes, archivedAt: row.archivedAt ? row.archivedAt.toISOString() : null,
     categoryIds, createdAt: row.createdAt.toISOString(),
   };
 }

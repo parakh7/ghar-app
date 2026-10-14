@@ -142,7 +142,24 @@ describe("househelps", () => {
     const h = await createHousehold(ctx, owner.cookie);
     const res = await ctx.request.post(`/api/households/${h.id}/househelps`).set(csrf).set("cookie", owner.cookie).send({ name: "Sunita" });
     expect(res.status).toBe(201);
-    expect(res.body.data).toMatchObject({ name: "Sunita", status: "ACTIVE", salaryMode: "FIXED_MONTHLY", salaryDueDay: 1, categoryIds: [] });
+    expect(res.body.data).toMatchObject({ name: "Sunita", status: "ACTIVE", salaryMode: "FIXED_MONTHLY", salaryDueDay: 1, allowedLeavesPerMonth: 0, categoryIds: [] });
+  });
+
+  it("defaults allowedLeavesPerMonth to 0, accepts an explicit value on create, and updates it", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+
+    const defaulted = await ctx.request.post(`/api/households/${h.id}/househelps`).set(csrf).set("cookie", owner.cookie).send({ name: "Sunita" });
+    expect(defaulted.status).toBe(201);
+    expect(defaulted.body.data.allowedLeavesPerMonth).toBe(0);
+
+    const created = await ctx.request.post(`/api/households/${h.id}/househelps`).set(csrf).set("cookie", owner.cookie).send({ name: "Ravi", allowedLeavesPerMonth: 4 });
+    expect(created.status).toBe(201);
+    expect(created.body.data.allowedLeavesPerMonth).toBe(4);
+
+    const updated = await ctx.request.patch(`/api/households/${h.id}/househelps/${created.body.data.id}`).set(csrf).set("cookie", owner.cookie).send({ allowedLeavesPerMonth: 7 });
+    expect(updated.status).toBe(200);
+    expect(updated.body.data.allowedLeavesPerMonth).toBe(7);
   });
 
   it("creates a househelp with category links", async () => {

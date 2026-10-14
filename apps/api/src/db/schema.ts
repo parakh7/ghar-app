@@ -180,6 +180,7 @@ export const househelps = pgTable("househelps", {
   halfDayRatePaise: paise("half_day_rate_paise"),
   /** 1–31; months shorter than this due on their last day. */
   salaryDueDay: smallint("salary_due_day").notNull().default(1),
+  allowedLeavesPerMonth: smallint("allowed_leaves_per_month").notNull().default(0),
   notes: text("notes"),
   archivedAt: tsz("archived_at"),
   createdAt: createdAt(),
@@ -188,6 +189,7 @@ export const househelps = pgTable("househelps", {
   unique("househelps_hh_id_uq").on(t.householdId, t.id),
   index("househelps_hh_status_idx").on(t.householdId, t.status),
   check("househelps_due_day_ck", sql`${t.salaryDueDay} between 1 and 31`),
+  check("househelps_allowed_leaves_ck", sql`${t.allowedLeavesPerMonth} between 0 and 31`),
   check("househelps_salary_nonneg_ck", sql`coalesce(${t.monthlySalaryPaise},0) >= 0 and coalesce(${t.dailyRatePaise},0) >= 0 and coalesce(${t.halfDayRatePaise},0) >= 0`),
 ]);
 
