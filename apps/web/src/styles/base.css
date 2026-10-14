@@ -13,7 +13,7 @@ body {
 }
 h1, h2, h3 { margin: 0; line-height: 1.2; letter-spacing: -0.01em; }
 p { margin: 0; }
-a { color: var(--accent-700); text-underline-offset: 3px; }
+a { color: var(--accent-700); text-decoration: none; }
 button, input, select, textarea { font: inherit; color: inherit; }
 :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--radius-sm); }
 .visually-hidden { position: absolute !important; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }

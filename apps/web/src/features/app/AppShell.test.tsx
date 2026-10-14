@@ -3,17 +3,18 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { HouseholdSummaryDTO } from "@household/shared";
 import { meKey } from "../auth/session";
 import { AppShell } from "./AppShell";
 
-const HOUSEHOLD = { id: "h1", name: "Shah Family", timezone: "Asia/Kolkata", role: "OWNER" as const, memberCount: 2 };
-const SECOND_HOUSEHOLD = { id: "h2", name: "Beach House", timezone: "Asia/Kolkata", role: "MEMBER" as const, memberCount: 3 };
+const HOUSEHOLD: HouseholdSummaryDTO = { id: "h1", name: "Shah Family", timezone: "Asia/Kolkata", role: "OWNER", memberCount: 2 };
+const SECOND_HOUSEHOLD: HouseholdSummaryDTO = { id: "h2", name: "Beach House", timezone: "Asia/Kolkata", role: "MEMBER", memberCount: 3 };
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 }
 
-function renderShell(unreadCount: number, households: (typeof HOUSEHOLD)[] = [HOUSEHOLD]) {
+function renderShell(unreadCount: number, households: HouseholdSummaryDTO[] = [HOUSEHOLD]) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   qc.setQueryData(meKey, { user: { id: "u1", name: "Parakh Shah", email: "p@example.com", emailVerified: true, createdAt: "2026-01-01T00:00:00.000Z" }, households });
   vi.spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL) => {
