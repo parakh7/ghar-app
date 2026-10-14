@@ -47,14 +47,21 @@ async function getSalarySection(deps: Deps, householdId: string): Promise<TodayS
   return { upcoming, hasAnySettlement: settlements.length > 0 };
 }
 
+/** Sections are independent of each other — fetched concurrently so total latency is the slowest section, not their sum. */
 export async function getTodayDashboard(deps: Deps, membership: AuthedMembership): Promise<TodayDashboardDTO> {
   const today = dateInZone(deps.clock.now(), membership.timezone);
   const dashboard: TodayDashboardDTO = {};
 
-  if (membership.permissions.has("attendance.view")) dashboard.attendance = await getAttendanceSection(deps, membership);
-  if (membership.permissions.has("checklists.view")) dashboard.checklist = await getChecklistSection(deps, membership);
-  if (membership.permissions.has("bills.view")) dashboard.bills = await getBillsSection(deps, membership.householdId, today);
-  if (membership.permissions.has("salaries.view")) dashboard.salary = await getSalarySection(deps, membership.householdId);
+  const [attendance, checklist, bills, salary] = await Promise.all([
+    membership.permissions.has("attendance.view") ? getAttendanceSection(deps, membership) : undefined,
+    membership.permissions.has("checklists.view") ? getChecklistSection(deps, membership) : undefined,
+    membership.permissions.has("bills.view") ? getBillsSection(deps, membership.householdId, today) : undefined,
+    membership.permissions.has("salaries.view") ? getSalarySection(deps, membership.householdId) : undefined,
+  ]);
+  if (attendance) dashboard.attendance = attendance;
+  if (checklist) dashboard.checklist = checklist;
+  if (bills) dashboard.bills = bills;
+  if (salary) dashboard.salary = salary;
 
   return dashboard;
 }

@@ -10,7 +10,7 @@ import { ConsoleEmailProvider, MemoryEmailProvider } from "./services/email/emai
 
 const env = loadEnv();
 const logger = createLogger(env);
-const pool = createPool(env.DATABASE_URL);
+const pool = createPool(env.DATABASE_URL, env.DATABASE_POOL_MAX);
 const db = createDb(pool);
 const email = env.EMAIL_PROVIDER === "memory" ? new MemoryEmailProvider() : new ConsoleEmailProvider(logger);
 // `{ consume: false }` (the default): the API server only schedules/produces jobs via

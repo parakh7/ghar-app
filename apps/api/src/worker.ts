@@ -12,7 +12,7 @@ import type { Deps } from "./services/deps.js";
 
 const env = loadEnv();
 const logger = createLogger(env);
-const pool = createPool(env.DATABASE_URL);
+const pool = createPool(env.DATABASE_URL, env.DATABASE_POOL_MAX);
 const db = createDb(pool);
 const email = env.EMAIL_PROVIDER === "memory" ? new MemoryEmailProvider() : new ConsoleEmailProvider(logger);
 const errorReporter = new ConsoleErrorReporter(logger);
