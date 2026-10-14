@@ -71,10 +71,10 @@ function generate(c: TestContext, cookie: string, householdId: string, househelp
 }
 
 describe("salary settlement generation", () => {
-  it("FIXED_MONTHLY: pays the full monthly salary regardless of absences", async () => {
+  it("FIXED_MONTHLY: deducts for every unworked day once the default leave allowance of 0 is exceeded", async () => {
     const owner = await signupUser(ctx);
     const h = await createHousehold(ctx, owner.cookie);
-    const help = await createHousehelp(ctx, owner.cookie, h.id, { salaryMode: "FIXED_MONTHLY", monthlySalaryPaise: 2_000_000 });
+    const help = await createHousehelp(ctx, owner.cookie, h.id, { salaryMode: "FIXED_MONTHLY", monthlySalaryPaise: 3_100_000 });
     await scheduleWholeWeek(ctx, h.id, help.id);
     await markAugust(ctx, h.id, help.id, {
       "2026-08-01": "ABSENT", "2026-08-02": "ABSENT", "2026-08-03": "ABSENT", "2026-08-04": "ABSENT", "2026-08-05": "ABSENT",
@@ -82,10 +82,65 @@ describe("salary settlement generation", () => {
     });
     const res = await generate(ctx, owner.cookie, h.id, help.id);
     expect(res.status).toBe(200);
+    // Default allowance is 0, so all 10 ABSENT days deduct: 10 * (3,100,000/31) = 1,000,000.
     expect(res.body.data).toMatchObject({
-      status: "PENDING", basePaise: 2_000_000, absenceDeductionPaise: 0, netPayablePaise: 2_000_000, workingDays: 31, absentDays: 10,
+      status: "PENDING", basePaise: 3_100_000, absenceDeductionPaise: 1_000_000, netPayablePaise: 2_100_000, workingDays: 31, absentDays: 10,
     });
     expect(res.body.data.dueDate).toBe("2026-09-01"); // default salaryDueDay = 1, due the month after periodMonth
+  });
+
+  it("FIXED_MONTHLY: no deduction while unworked days stay within the configured allowance", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    const help = await createHousehelp(ctx, owner.cookie, h.id, { salaryMode: "FIXED_MONTHLY", monthlySalaryPaise: 3_100_000, allowedLeavesPerMonth: 5 });
+    await scheduleWholeWeek(ctx, h.id, help.id);
+    await markAugust(ctx, h.id, help.id, {
+      "2026-08-01": "ABSENT", "2026-08-02": "ABSENT", "2026-08-03": "ABSENT", "2026-08-04": "ABSENT", "2026-08-05": "ABSENT",
+    });
+    const res = await generate(ctx, owner.cookie, h.id, help.id);
+    expect(res.status).toBe(200);
+    expect(res.body.data).toMatchObject({ basePaise: 3_100_000, absenceDeductionPaise: 0, netPayablePaise: 3_100_000, absentDays: 5 });
+  });
+
+  it("FIXED_MONTHLY: deducts only the days beyond the configured allowance", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    const help = await createHousehelp(ctx, owner.cookie, h.id, { salaryMode: "FIXED_MONTHLY", monthlySalaryPaise: 3_100_000, allowedLeavesPerMonth: 5 });
+    await scheduleWholeWeek(ctx, h.id, help.id);
+    await markAugust(ctx, h.id, help.id, {
+      "2026-08-01": "ABSENT", "2026-08-02": "ABSENT", "2026-08-03": "ABSENT", "2026-08-04": "ABSENT", "2026-08-05": "ABSENT",
+      "2026-08-06": "ABSENT", "2026-08-07": "ABSENT", "2026-08-08": "ABSENT", "2026-08-09": "ABSENT", "2026-08-10": "ABSENT",
+    });
+    const res = await generate(ctx, owner.cookie, h.id, help.id);
+    expect(res.status).toBe(200);
+    // 10 absences - 5 allowed = 5 excess days * (3,100,000/31) = 500,000.
+    expect(res.body.data).toMatchObject({ basePaise: 3_100_000, absenceDeductionPaise: 500_000, netPayablePaise: 2_600_000, absentDays: 10 });
+  });
+
+  it("FIXED_MONTHLY: a HALF_DAY counts as 0.5 toward the allowance and deducts at half the per-day rate", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    const help = await createHousehelp(ctx, owner.cookie, h.id, { salaryMode: "FIXED_MONTHLY", monthlySalaryPaise: 3_100_000 });
+    await scheduleWholeWeek(ctx, h.id, help.id);
+    await markAugust(ctx, h.id, help.id, { "2026-08-15": "HALF_DAY" });
+    const res = await generate(ctx, owner.cookie, h.id, help.id);
+    expect(res.status).toBe(200);
+    // Default allowance 0: 0.5 excess unit * (3,100,000/31) = 50,000.
+    expect(res.body.data).toMatchObject({ basePaise: 3_100_000, absenceDeductionPaise: 50_000, netPayablePaise: 3_050_000, halfDays: 1 });
+  });
+
+  it("a non-zero allowedLeavesPerMonth has no effect on ATTENDANCE_BASED's existing deduction formula", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    const help = await createHousehelp(ctx, owner.cookie, h.id, { salaryMode: "ATTENDANCE_BASED", monthlySalaryPaise: 3_100_000, allowedLeavesPerMonth: 10 });
+    await scheduleWholeWeek(ctx, h.id, help.id);
+    await markAugust(ctx, h.id, help.id, { "2026-08-05": "ABSENT", "2026-08-06": "ABSENT", "2026-08-07": "HALF_DAY" });
+    const res = await generate(ctx, owner.cookie, h.id, help.id);
+    expect(res.status).toBe(200);
+    // Identical scenario and result to the existing "ATTENDANCE_BASED: prorates absence and half-day
+    // deductions" test above, just with allowedLeavesPerMonth set — proves the field has zero effect
+    // on this mode's formula: prorate(3,100,000, 2, 31) + prorate(3,100,000, 1, 62) = 200,000 + 50,000 = 250,000.
+    expect(res.body.data).toMatchObject({ basePaise: 3_100_000, absenceDeductionPaise: 250_000, netPayablePaise: 2_850_000 });
   });
 
   it("ATTENDANCE_BASED: prorates absence and half-day deductions off the monthly salary", async () => {

@@ -124,7 +124,12 @@ function computeBasePay(help: HousehelpRow, agg: MonthAttendanceAgg): BasePay {
   switch (help.salaryMode) {
     case "FIXED_MONTHLY": {
       if (help.monthlySalaryPaise == null) throw Errors.validation({ monthlySalaryPaise: "This househelp has no monthly salary set." });
-      return { basePaise: help.monthlySalaryPaise, absenceDeductionPaise: 0 };
+      const base = help.monthlySalaryPaise;
+      const unworkedHalfDayUnits = agg.absentDays * 2 + agg.leaveDays * 2 + agg.halfDays;
+      const allowedHalfDayUnits = help.allowedLeavesPerMonth * 2;
+      const excessHalfDayUnits = Math.max(0, unworkedHalfDayUnits - allowedHalfDayUnits);
+      const absenceDeductionPaise = agg.workingDays > 0 ? prorate(base, excessHalfDayUnits, agg.workingDays * 2) : 0;
+      return { basePaise: base, absenceDeductionPaise };
     }
     case "ATTENDANCE_BASED": {
       if (help.monthlySalaryPaise == null) throw Errors.validation({ monthlySalaryPaise: "This househelp has no monthly salary set." });
