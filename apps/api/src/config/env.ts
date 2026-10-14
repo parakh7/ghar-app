@@ -2,6 +2,8 @@ import { z } from "zod";
 
 const bool = z.enum(["true", "false", "1", "0"]).transform((v) => v === "true" || v === "1");
 
+const PLACEHOLDER_EMAIL_FROM = "Household <no-reply@example.com>";
+
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().int().positive().default(4000),
@@ -12,11 +14,15 @@ const envSchema = z.object({
   REDIS_URL: z.string().url().default("redis://localhost:6379"),
   SESSION_TTL_DAYS: z.coerce.number().int().min(1).max(365).default(30),
   EMAIL_PROVIDER: z.enum(["console", "memory"]).default("console"),
-  EMAIL_FROM: z.string().default("Household <no-reply@example.com>"),
+  EMAIL_FROM: z.string().default(PLACEHOLDER_EMAIL_FROM),
   RATE_LIMIT_AUTH_MAX: z.coerce.number().int().positive().default(10),
   RATE_LIMIT_GLOBAL_MAX: z.coerce.number().int().positive().default(300),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
   LOG_PRETTY: bool.optional(),
+}).superRefine((env, ctx) => {
+  if (env.NODE_ENV === "production" && env.EMAIL_FROM === PLACEHOLDER_EMAIL_FROM) {
+    ctx.addIssue({ code: "custom", path: ["EMAIL_FROM"], message: "EMAIL_FROM must be set to a real sender address in production (the default placeholder is for development only)." });
+  }
 });
 
 export type Env = z.infer<typeof envSchema>;

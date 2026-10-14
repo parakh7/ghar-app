@@ -284,7 +284,8 @@ Any Node 20+ host plus managed Postgres (for example Render, Railway, Fly.io or 
 - Set `TRUST_PROXY` to the number of proxies in front of the API.
 - Health checks: `GET /api/health/live` (process) and `GET /api/health/ready` (includes DB).
 - The API shuts down gracefully on SIGTERM.
-- Replace `ConsoleEmailProvider` with a real provider (SES, Resend or Postmark) by implementing `EmailProvider` — a one-file change.
+- Replace `ConsoleEmailProvider` with a real provider (SES, Resend or Postmark) by implementing `EmailProvider`, and add the corresponding value to `EMAIL_PROVIDER`'s enum in `apps/api/src/config/env.ts` — two files, not one.
+- Set `EMAIL_FROM` to a real sender address — the API refuses to start in production with the development placeholder.
 
 ## Troubleshooting
 
