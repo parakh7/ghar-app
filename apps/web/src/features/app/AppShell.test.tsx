@@ -7,14 +7,15 @@ import { meKey } from "../auth/session";
 import { AppShell } from "./AppShell";
 
 const HOUSEHOLD = { id: "h1", name: "Shah Family", timezone: "Asia/Kolkata", role: "OWNER" as const, memberCount: 2 };
+const SECOND_HOUSEHOLD = { id: "h2", name: "Beach House", timezone: "Asia/Kolkata", role: "MEMBER" as const, memberCount: 3 };
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 }
 
-function renderShell(unreadCount: number) {
+function renderShell(unreadCount: number, households: (typeof HOUSEHOLD)[] = [HOUSEHOLD]) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  qc.setQueryData(meKey, { user: { id: "u1", name: "Parakh", email: "p@example.com", emailVerified: true, createdAt: "2026-01-01T00:00:00.000Z" }, households: [HOUSEHOLD] });
+  qc.setQueryData(meKey, { user: { id: "u1", name: "Parakh Shah", email: "p@example.com", emailVerified: true, createdAt: "2026-01-01T00:00:00.000Z" }, households });
   vi.spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL) => {
     const url = String(input);
     if (url.endsWith("/notifications/unread-count")) return jsonResponse({ success: true, data: { count: unreadCount }, message: null });
@@ -26,6 +27,7 @@ function renderShell(unreadCount: number) {
         <Routes>
           <Route element={<AppShell />}><Route index element={<div>Home page body</div>} /></Route>
           <Route path="/search" element={<div>Search results page</div>} />
+          <Route path="/more" element={<div>More page</div>} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -59,5 +61,44 @@ describe("AppShell", () => {
     await userEvent.type(input, "sunita");
     await new Promise((r) => setTimeout(r, 350));
     await screen.findByText("Search results page");
+  });
+
+  it("groups the desktop sidebar into Main and More, with the right links", async () => {
+    renderShell(0);
+    const sidebar = await screen.findByRole("navigation", { name: "Sidebar" });
+    const within = sidebar;
+    expect(within.textContent).toContain("Househelps");
+    expect(within.textContent).toContain("Salaries");
+    expect(within.textContent).toContain("Reports");
+    expect(within.textContent).toContain("Family members");
+    expect(within.textContent).toContain("Settings");
+    expect(screen.getByRole("link", { name: /Salaries/ })).toHaveAttribute("href", "/salary");
+    expect(screen.getByRole("link", { name: /Family members/ })).toHaveAttribute("href", "/members");
+    expect(screen.getByRole("link", { name: /Settings/ })).toHaveAttribute("href", "/settings/notifications");
+  });
+
+  it("switches households from the sidebar switcher", async () => {
+    renderShell(0, [HOUSEHOLD, SECOND_HOUSEHOLD]);
+    await screen.findByText("Home page body");
+    const triggers = screen.getAllByRole("button", { name: /Shah Family/ });
+    await userEvent.click(triggers[triggers.length - 1]!);
+    const option = await screen.findByRole("menuitem", { name: "Beach House" });
+    await userEvent.click(option);
+    expect(screen.getAllByText("Beach House").length).toBeGreaterThan(0);
+  });
+
+  it("collapses and expands the sidebar", async () => {
+    renderShell(0);
+    const toggle = await screen.findByRole("button", { name: "Collapse sidebar" });
+    await userEvent.click(toggle);
+    expect(await screen.findByRole("button", { name: "Expand sidebar" })).toBeInTheDocument();
+  });
+
+  it("shows the user's initials in the profile row, linking to /more", async () => {
+    renderShell(0);
+    const profileLinks = await screen.findAllByRole("link", { name: "View profile" });
+    expect(profileLinks[0]).toHaveTextContent("PS");
+    await userEvent.click(profileLinks[0]!);
+    await screen.findByText("More page");
   });
 });

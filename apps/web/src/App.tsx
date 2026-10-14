@@ -69,6 +69,7 @@ export function App() {
         <Route path="members" element={<MembersPage />} />
         <Route path="notifications" element={<NotificationsPage />} />
         <Route path="settings/notifications" element={<NotificationSettingsPage />} />
+        <Route path="reports" element={<ReportsPage />} />
         <Route path="search" element={<SearchPage />} />
         <Route path="more" element={<MorePage />} />
       </Route>

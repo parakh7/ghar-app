@@ -51,6 +51,9 @@ export function MorePage() {
 
       <h2 className="section-title">Household</h2>
       <div className="list">
+        <Link to="/salary" className="list__item">
+          <span className="list__label">Salaries</span>
+        </Link>
         <Link to="/members" className="list__item">
           <span className="list__label">Members</span>
         </Link>
