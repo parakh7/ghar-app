@@ -7,7 +7,7 @@ import { meKey } from "../../auth/session";
 import { SettlementDetailPage } from "./SettlementDetailPage";
 
 const HOUSEHOLD = { id: "h1", name: "Shah Family", timezone: "Asia/Kolkata", role: "OWNER" as const, memberCount: 2 };
-const SUNITA = { id: "hh1", name: "Sunita", phone: null, roleTitle: null, status: "ACTIVE" as const, startDate: null, endDate: null, salaryMode: "FIXED_MONTHLY" as const, monthlySalaryPaise: 5000000, dailyRatePaise: null, halfDayRatePaise: null, salaryDueDay: 1, notes: null, archivedAt: null, categoryIds: [], createdAt: "2026-01-01T00:00:00.000Z" };
+const SUNITA = { id: "hh1", name: "Sunita", phone: null, roleTitle: null, status: "ACTIVE" as const, startDate: null, endDate: null, salaryMode: "FIXED_MONTHLY" as const, monthlySalaryPaise: 5000000, dailyRatePaise: null, halfDayRatePaise: null, salaryDueDay: 1, allowedLeavesPerMonth: 0, notes: null, archivedAt: null, categoryIds: [], createdAt: "2026-01-01T00:00:00.000Z" };
 
 function settlementDetail(overrides: Partial<Record<string, unknown>> = {}) {
   return {

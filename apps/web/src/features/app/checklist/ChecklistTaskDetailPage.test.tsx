@@ -8,7 +8,7 @@ import { ChecklistTaskDetailPage } from "./ChecklistTaskDetailPage";
 
 const HOUSEHOLD = { id: "h1", name: "Shah Family", timezone: "Asia/Kolkata", role: "OWNER" as const, memberCount: 2 };
 const TASK = { id: "t1", name: "Sweep floors", description: null, categoryId: null, frequency: "DAILY" as const, weekdays: null, dayOfMonth: null, specificDate: null, intervalDays: null, anchorDate: null, preferredTime: null, priority: "NORMAL" as const, sortOrder: 0, isActive: true, archivedAt: null, createdAt: "2026-01-01T00:00:00.000Z" };
-const SUNITA = { id: "hh1", name: "Sunita", phone: null, roleTitle: null, status: "ACTIVE" as const, startDate: null, endDate: null, salaryMode: "FIXED_MONTHLY" as const, monthlySalaryPaise: null, dailyRatePaise: null, halfDayRatePaise: null, salaryDueDay: 1, notes: null, archivedAt: null, categoryIds: [], createdAt: "2026-01-01T00:00:00.000Z" };
+const SUNITA = { id: "hh1", name: "Sunita", phone: null, roleTitle: null, status: "ACTIVE" as const, startDate: null, endDate: null, salaryMode: "FIXED_MONTHLY" as const, monthlySalaryPaise: null, dailyRatePaise: null, halfDayRatePaise: null, salaryDueDay: 1, allowedLeavesPerMonth: 0, notes: null, archivedAt: null, categoryIds: [], createdAt: "2026-01-01T00:00:00.000Z" };
 
 function jsonResponse(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });

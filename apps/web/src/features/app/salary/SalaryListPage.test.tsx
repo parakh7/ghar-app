@@ -7,7 +7,7 @@ import { meKey } from "../../auth/session";
 import { SalaryListPage } from "./SalaryListPage";
 
 const HOUSEHOLD = { id: "h1", name: "Shah Family", timezone: "Asia/Kolkata", role: "OWNER" as const, memberCount: 2 };
-const SUNITA = { id: "hh1", name: "Sunita", phone: null, roleTitle: null, status: "ACTIVE" as const, startDate: null, endDate: null, salaryMode: "FIXED_MONTHLY" as const, monthlySalaryPaise: 5000000, dailyRatePaise: null, halfDayRatePaise: null, salaryDueDay: 1, notes: null, archivedAt: null, categoryIds: [], createdAt: "2026-01-01T00:00:00.000Z" };
+const SUNITA = { id: "hh1", name: "Sunita", phone: null, roleTitle: null, status: "ACTIVE" as const, startDate: null, endDate: null, salaryMode: "FIXED_MONTHLY" as const, monthlySalaryPaise: 5000000, dailyRatePaise: null, halfDayRatePaise: null, salaryDueDay: 1, allowedLeavesPerMonth: 0, notes: null, archivedAt: null, categoryIds: [], createdAt: "2026-01-01T00:00:00.000Z" };
 const SETTLEMENT = {
   id: "s1", househelpId: "hh1", periodMonth: "2026-09-01", dueDate: "2026-09-05",
   basePaise: 5000000, workingDays: 26, presentDays: 26, halfDays: 0, absentDays: 0, leaveDays: 0, holidayDays: 0,

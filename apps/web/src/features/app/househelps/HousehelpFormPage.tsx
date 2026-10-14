@@ -38,7 +38,7 @@ export function HousehelpFormPage({ mode }: { mode: "create" | "edit" }) {
   const [form, setForm] = useState({
     name: "", phone: "", roleTitle: "", status: "ACTIVE" as "ACTIVE" | "INACTIVE",
     salaryMode: "FIXED_MONTHLY" as (typeof SALARY_MODES)[number]["value"],
-    monthlySalaryPaise: "", dailyRatePaise: "", halfDayRatePaise: "", salaryDueDay: "1", notes: "",
+    monthlySalaryPaise: "", dailyRatePaise: "", halfDayRatePaise: "", salaryDueDay: "1", allowedLeavesPerMonth: "0", notes: "",
   });
   const [categoryIds, setCategoryIds] = useState<string[]>([]);
   const [seeded, setSeeded] = useState(false);
@@ -56,7 +56,7 @@ export function HousehelpFormPage({ mode }: { mode: "create" | "edit" }) {
     setForm({
       name: h.name, phone: h.phone ?? "", roleTitle: h.roleTitle ?? "", status: h.status, salaryMode: h.salaryMode,
       monthlySalaryPaise: paiseToInput(h.monthlySalaryPaise), dailyRatePaise: paiseToInput(h.dailyRatePaise), halfDayRatePaise: paiseToInput(h.halfDayRatePaise),
-      salaryDueDay: String(h.salaryDueDay), notes: h.notes ?? "",
+      salaryDueDay: String(h.salaryDueDay), allowedLeavesPerMonth: String(h.allowedLeavesPerMonth), notes: h.notes ?? "",
     });
     setCategoryIds(h.categoryIds);
   }
@@ -103,7 +103,7 @@ export function HousehelpFormPage({ mode }: { mode: "create" | "edit" }) {
       const body = {
         name: form.name, phone: form.phone || undefined, roleTitle: form.roleTitle || undefined, salaryMode: form.salaryMode,
         monthlySalaryPaise, dailyRatePaise, halfDayRatePaise,
-        salaryDueDay: Number(form.salaryDueDay), notes: form.notes || undefined, categoryIds,
+        salaryDueDay: Number(form.salaryDueDay), allowedLeavesPerMonth: Number(form.allowedLeavesPerMonth), notes: form.notes || undefined, categoryIds,
       };
       const parsed = createHousehelpSchema.safeParse(body);
       if (!parsed.success) return errors.setFields(zodFieldErrors(parsed.error));
@@ -117,6 +117,7 @@ export function HousehelpFormPage({ mode }: { mode: "create" | "edit" }) {
         salaryMode: form.salaryMode,
         monthlySalaryPaise, dailyRatePaise, halfDayRatePaise,
         salaryDueDay: Number(form.salaryDueDay),
+        allowedLeavesPerMonth: Number(form.allowedLeavesPerMonth),
         notes: form.notes.trim() ? form.notes : null,
         categoryIds,
       };
@@ -161,6 +162,9 @@ export function HousehelpFormPage({ mode }: { mode: "create" | "edit" }) {
 
         {(form.salaryMode === "FIXED_MONTHLY" || form.salaryMode === "ATTENDANCE_BASED") && (
           <TextField label="Monthly salary (₹)" inputMode="decimal" value={form.monthlySalaryPaise} onChange={set("monthlySalaryPaise")} error={errors.fieldErrors.monthlySalaryPaise} />
+        )}
+        {form.salaryMode === "FIXED_MONTHLY" && (
+          <TextField label="Leaves allowed per month" hint="Paid ABSENT/LEAVE days before deductions start" inputMode="numeric" value={form.allowedLeavesPerMonth} onChange={set("allowedLeavesPerMonth")} error={errors.fieldErrors.allowedLeavesPerMonth} />
         )}
         {form.salaryMode === "DAILY_RATE" && (
           <>

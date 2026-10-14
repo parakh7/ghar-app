@@ -11,7 +11,7 @@ const HOUSEHOLD = { id: "h1", name: "Shah Family", timezone: "Asia/Kolkata", rol
 const HOUSEHELP = {
   id: "hh1", name: "Sunita", phone: "9876543210", roleTitle: "Cook", status: "ACTIVE" as const,
   startDate: null, endDate: null, salaryMode: "FIXED_MONTHLY" as const, monthlySalaryPaise: 1500000,
-  dailyRatePaise: null, halfDayRatePaise: null, salaryDueDay: 5, notes: "Prefers mornings",
+  dailyRatePaise: null, halfDayRatePaise: null, salaryDueDay: 5, allowedLeavesPerMonth: 0, notes: "Prefers mornings",
   archivedAt: null, categoryIds: [], createdAt: "2026-01-01T00:00:00.000Z",
 };
 
@@ -108,5 +108,39 @@ describe("HousehelpFormPage — create mode", () => {
     expect(postCall).toBeDefined();
     const body = JSON.parse((postCall![1] as RequestInit).body as string);
     expect(body.monthlySalaryPaise).toBe(125050);
+  });
+
+  it("includes allowedLeavesPerMonth in the request body, only for FIXED_MONTHLY", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/households/h1")) return jsonResponse({ success: true, data: { ...HOUSEHOLD, permissions: ["househelps.manage"] }, message: null });
+      if (url.includes("/categories")) return jsonResponse({ success: true, data: [], message: null });
+      if (init?.method === "POST" && url.endsWith("/househelps")) return jsonResponse({ success: true, data: { ...HOUSEHELP, id: "hh2" }, message: null }, 201);
+      throw new Error(`unexpected fetch ${url}`);
+    }) as typeof fetch);
+
+    renderCreatePage();
+    await userEvent.type(await screen.findByLabelText("Name"), "Sunita");
+    await userEvent.type(screen.getByLabelText("Leaves allowed per month"), "4");
+    await userEvent.click(screen.getByRole("button", { name: "Add househelp" }));
+
+    const postCall = fetchSpy.mock.calls.find(([u, init]) => String(u).endsWith("/househelps") && (init as RequestInit | undefined)?.method === "POST");
+    expect(postCall).toBeDefined();
+    const body = JSON.parse((postCall![1] as RequestInit).body as string);
+    expect(body.allowedLeavesPerMonth).toBe(4);
+  });
+
+  it("hides the leaves-allowed field for DAILY_RATE", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/households/h1")) return jsonResponse({ success: true, data: { ...HOUSEHOLD, permissions: ["househelps.manage"] }, message: null });
+      if (url.includes("/categories")) return jsonResponse({ success: true, data: [], message: null });
+      throw new Error(`unexpected fetch ${url}`);
+    }) as typeof fetch);
+
+    renderCreatePage();
+    await screen.findByLabelText("Name");
+    await userEvent.selectOptions(screen.getByLabelText("Salary type"), "DAILY_RATE");
+    expect(screen.queryByLabelText("Leaves allowed per month")).not.toBeInTheDocument();
   });
 });

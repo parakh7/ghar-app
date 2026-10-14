@@ -26,7 +26,7 @@ describe("HousehelpsListPage", () => {
       if (url.endsWith("/households/h1")) return jsonResponse({ success: true, data: { ...HOUSEHOLD, permissions: ["househelps.view", "househelps.manage", "categories.manage"] }, message: null });
       if (url.endsWith("/categories")) return jsonResponse({ success: true, data: [{ id: "c1", name: "Cleaning", sortOrder: 0, isActive: true }], message: null });
       if (url.includes("/households/h1/househelps")) {
-        return jsonResponse({ success: true, data: [{ id: "hh1", name: "Sunita", phone: null, roleTitle: "Cook", status: "ACTIVE", startDate: null, endDate: null, salaryMode: "FIXED_MONTHLY", monthlySalaryPaise: 1000000, dailyRatePaise: null, halfDayRatePaise: null, salaryDueDay: 1, notes: null, archivedAt: null, categoryIds: [], createdAt: "2026-01-01T00:00:00.000Z" }], message: null });
+        return jsonResponse({ success: true, data: [{ id: "hh1", name: "Sunita", phone: null, roleTitle: "Cook", status: "ACTIVE", startDate: null, endDate: null, salaryMode: "FIXED_MONTHLY", monthlySalaryPaise: 1000000, dailyRatePaise: null, halfDayRatePaise: null, salaryDueDay: 1, allowedLeavesPerMonth: 0, notes: null, archivedAt: null, categoryIds: [], createdAt: "2026-01-01T00:00:00.000Z" }], message: null });
       }
       throw new Error(`unexpected fetch ${url}`);
     }) as typeof fetch);
@@ -50,8 +50,8 @@ describe("HousehelpsListPage", () => {
         return jsonResponse({
           success: true,
           data: [
-            { id: "hh1", name: "Sunita", phone: null, roleTitle: "Cook", status: "ACTIVE", startDate: null, endDate: null, salaryMode: "FIXED_MONTHLY", monthlySalaryPaise: null, dailyRatePaise: null, halfDayRatePaise: null, salaryDueDay: 1, notes: null, archivedAt: null, categoryIds: ["c1"], createdAt: "2026-01-01T00:00:00.000Z" },
-            { id: "hh2", name: "Ramesh", phone: null, roleTitle: "Driver", status: "ACTIVE", startDate: null, endDate: null, salaryMode: "FIXED_MONTHLY", monthlySalaryPaise: null, dailyRatePaise: null, halfDayRatePaise: null, salaryDueDay: 1, notes: null, archivedAt: null, categoryIds: [], createdAt: "2026-01-01T00:00:00.000Z" },
+            { id: "hh1", name: "Sunita", phone: null, roleTitle: "Cook", status: "ACTIVE", startDate: null, endDate: null, salaryMode: "FIXED_MONTHLY", monthlySalaryPaise: null, dailyRatePaise: null, halfDayRatePaise: null, salaryDueDay: 1, allowedLeavesPerMonth: 0, notes: null, archivedAt: null, categoryIds: ["c1"], createdAt: "2026-01-01T00:00:00.000Z" },
+            { id: "hh2", name: "Ramesh", phone: null, roleTitle: "Driver", status: "ACTIVE", startDate: null, endDate: null, salaryMode: "FIXED_MONTHLY", monthlySalaryPaise: null, dailyRatePaise: null, halfDayRatePaise: null, salaryDueDay: 1, allowedLeavesPerMonth: 0, notes: null, archivedAt: null, categoryIds: [], createdAt: "2026-01-01T00:00:00.000Z" },
           ],
           message: null,
         });
@@ -82,7 +82,7 @@ describe("HousehelpsListPage", () => {
         return jsonResponse({
           success: true,
           data: [
-            { id: "hh1", name: "Priya", phone: null, roleTitle: "Chef", status: "ACTIVE", startDate: null, endDate: null, salaryMode: "FIXED_MONTHLY", monthlySalaryPaise: null, dailyRatePaise: null, halfDayRatePaise: null, salaryDueDay: 1, notes: null, archivedAt: null, categoryIds: ["c2"], createdAt: "2026-01-01T00:00:00.000Z" },
+            { id: "hh1", name: "Priya", phone: null, roleTitle: "Chef", status: "ACTIVE", startDate: null, endDate: null, salaryMode: "FIXED_MONTHLY", monthlySalaryPaise: null, dailyRatePaise: null, halfDayRatePaise: null, salaryDueDay: 1, allowedLeavesPerMonth: 0, notes: null, archivedAt: null, categoryIds: ["c2"], createdAt: "2026-01-01T00:00:00.000Z" },
           ],
           message: null,
         });
