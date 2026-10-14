@@ -46,7 +46,10 @@ export function ReportsPage() {
       </div>
       <input
         type="month" value={month} onChange={(e) => setMonth(e.target.value)} aria-label="Month"
-        style={{ margin: "var(--space-4) 0", height: "var(--touch)", padding: "0 var(--space-3)", borderRadius: "var(--radius-sm)", border: "1.5px solid var(--line-strong)" }}
+        style={{
+          margin: "var(--space-4) 0", height: "var(--touch)", padding: "0 var(--space-3)", borderRadius: "var(--radius-sm)",
+          border: "1.5px solid var(--line-strong)", background: "var(--card)", color: "var(--text)",
+        }}
       />
       {report && (
         <>
