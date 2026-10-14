@@ -38,7 +38,7 @@ import * as today from "../services/today.service.js";
 export function householdRoutes(deps: Deps): Router {
   const r = Router();
   r.use(requireAuth);
-  const limiter = inviteLimiter(deps.env.RATE_LIMIT_AUTH_MAX);
+  const limiter = inviteLimiter(deps.env.RATE_LIMIT_AUTH_MAX, deps.redis);
 
   r.get("/", async (req, res) => {
     ok(res, await households.listHouseholdsForUser(deps.db, req.auth!.user.id));

@@ -38,7 +38,7 @@ export function createApp(deps: Deps): Express {
   app.use(cookieParser());
 
   app.use("/api/health", healthRoutes(deps));
-  app.use("/api", globalLimiter(deps.env.RATE_LIMIT_GLOBAL_MAX));
+  app.use("/api", globalLimiter(deps.env.RATE_LIMIT_GLOBAL_MAX, deps.redis));
   app.use("/api", csrfProtection(origins));
   app.use("/api", authenticate(deps));
   app.use((_req, res, next) => { res.setHeader("cache-control", "no-store"); next(); });
@@ -48,6 +48,6 @@ export function createApp(deps: Deps): Express {
   app.use("/api/invites", inviteRoutes(deps));
 
   app.use(notFoundHandler);
-  app.use(errorHandler(deps.logger));
+  app.use(errorHandler(deps.logger, deps.errorReporter));
   return app;
 }
