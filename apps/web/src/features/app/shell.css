@@ -82,15 +82,23 @@
   .shell__collapse { background: none; border: 0; color: var(--text-2); cursor: pointer; padding: var(--space-1); border-radius: var(--radius-sm); display: flex; }
   .shell__collapse:hover { background: var(--hover); }
 
+  .shell__search { display: block; padding: 0 var(--space-2) var(--space-4); margin-bottom: var(--space-4); border-bottom: 1px solid var(--border); }
+  .shell__search input {
+    width: 100%; height: var(--touch); padding: 0 var(--space-3); border-radius: var(--radius-sm);
+    border: 1.5px solid var(--border); background: var(--page); color: var(--text); font-size: var(--text-sm);
+  }
+
   .nav-item span { white-space: nowrap; overflow: hidden; }
 
+  .shell--collapsed { grid-template-columns: 76px 1fr; }
   .shell--collapsed .shell__sidebar { width: 76px; padding-left: var(--space-2); padding-right: var(--space-2); }
   .shell--collapsed .shell__app,
   .shell--collapsed .shell__switcher-label,
   .shell--collapsed .shell__switcher-name,
   .shell--collapsed .shell__group-label,
   .shell--collapsed .nav-item span,
-  .shell--collapsed .shell__profile-text { display: none; }
+  .shell--collapsed .shell__profile-text,
+  .shell--collapsed .shell__search { display: none; }
   .shell--collapsed .shell__switcher-trigger { justify-content: center; }
 }
 
