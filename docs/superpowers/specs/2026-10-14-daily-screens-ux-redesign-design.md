@@ -1,6 +1,9 @@
 # Daily Screens UX Redesign — Design Spec
 
-**Status:** Approved.
+**Status:** Superseded by `2026-10-14-ghar-home-redesign-design.md` — the user provided a more complete,
+concrete design handoff (dark-first Indigo/Warm-Gray/Coral tokens, full component list, shell/nav
+rebuild, home page structure) covering the same screens plus more. No implementation work from this
+spec was built. Kept for history.
 
 ## Context
 
