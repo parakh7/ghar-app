@@ -2,28 +2,51 @@
 :root {
   --font: "Atkinson Hyperlegible Next", "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 
-  /* palette — flat "Indigo + Warm Gray", no gradients */
-  --accent-900: #332C7A;
-  --accent-700: #4F46B8;   /* primary */
-  --accent-600: #6C63D6;
-  --accent-100: #E3E0F7;
-  --accent-50:  #F4F3FC;
-  --today-500: #8A6D1E;  /* "today" marker — muted ochre, not orange */
-  --today-100: #F2ECD8;
-  --dusk: #4F46B8;        /* same indigo as the primary accent — no separate violet hue */
-  --paper: #F6F5F3;
-  --surface: #FFFFFF;
-  --ink: #211F2B;
-  --ink-2: #5B596A;
-  --ink-3: #807E8F;
-  --line: #E4E2EA;
-  --line-strong: #D2CFDC;
+  /* palette — "Ghar" Indigo + Warm Gray, dark default. Flat fills, no gradients. */
+  --page: #17141F;
+  --side: #1D1A2A;
+  --card: #221E31;
+  --card-hover: #272238;
+  --hover: #2A2538;
+  --active-bg: #2B2236;
+  --chip: #2E2940;
+  --border: #34304A;
+  --border-soft: #2C2840;
+  --text: #F3EEE8;
+  --text-2: #BDB5AD;
+  --text-3: #9C948D;
+  --indigo: #3B3382;
+  --indigo-soft: #B9AFF8;
+  --coral: #F4906F;       /* reserved for actions — never decoration */
+  --coral-hover: #F7A284;
+  --coral-ink: #2E1209;
+  --green-bg: #1E3A2C;  --green-fg: #8FD4A8;
+  --amber-bg: #3D3115;  --amber-fg: #F2C867;
+  --red-bg:   #43212A;  --red-fg:   #FFA394;
+
+  /* legacy token names — aliased onto the palette above so existing components keep working
+     unchanged until they're rebuilt against the canonical names directly. */
+  --accent-900: var(--indigo);
+  --accent-700: var(--coral);
+  --accent-600: var(--coral-hover);
+  --accent-100: var(--indigo-soft);
+  --accent-50:  var(--hover);
+  --today-500: var(--amber-fg);
+  --today-100: var(--amber-bg);
+  --dusk: var(--indigo-soft);
+  --paper: var(--page);
+  --surface: var(--card);
+  --ink: var(--text);
+  --ink-2: var(--text-2);
+  --ink-3: var(--text-3);
+  --line: var(--border);
+  --line-strong: var(--border-soft);
 
   /* status — always paired with an icon or word, never colour alone */
-  --overdue: #B3261E;  --overdue-bg: #FBE9E7;
-  --due-soon: #9A5B00; --due-soon-bg: #FFF1DB;
-  --ok: #1E6B40;       --ok-bg: #E3F2E8;
-  --info: #1F5C8A;     --info-bg: #E5F0F8;
+  --overdue: var(--red-fg);     --overdue-bg: var(--red-bg);
+  --due-soon: var(--amber-fg);  --due-soon-bg: var(--amber-bg);
+  --ok: var(--green-fg);        --ok-bg: var(--green-bg);
+  --info: #8CC4F0;              --info-bg: #122838;
 
   /* type scale (17px base, 1.2 ratio) */
   --text-xs: 0.8125rem;
@@ -42,47 +65,50 @@
   --radius-lg: 22px;  /* sheets */
   --touch: 48px;      /* ≥44px minimum target */
 
-  --shadow-sheet: 0 -8px 32px rgba(33, 31, 43, 0.14);
-  --shadow-card: 0 1px 2px rgba(33, 31, 43, 0.06), 0 8px 24px rgba(33, 31, 43, 0.08);
-  --shadow-accent: 0 10px 24px -10px rgba(79, 70, 184, 0.4);
-  --shadow-hero: 0 20px 50px -18px rgba(79, 70, 184, 0.3);
+  --shadow-sheet: 0 -8px 32px rgba(0, 0, 0, 0.5);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.35);
+  --shadow-accent: 0 10px 24px -10px rgba(244, 144, 111, 0.4);
+  --shadow-hero: 0 20px 50px -18px rgba(185, 175, 248, 0.3);
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
   --dur: 180ms;
 
-  --focus: 0 0 0 3px var(--paper), 0 0 0 5px var(--accent-700);
+  --focus: var(--indigo-soft);
 
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --nav-h: 64px;
 
-  color-scheme: light;
+  color-scheme: dark;
 }
 
-@media (prefers-color-scheme: dark) {
+/* Optional light theme (passive — follows OS preference; no manual toggle built yet). */
+@media (prefers-color-scheme: light) {
   :root {
-    --accent-900: #D8D4FA;
-    --accent-700: #8B82E8;
-    --accent-600: #A79EF2;
-    --accent-100: #2B2650;
-    --accent-50: #211D3E;
-    --today-500: #D4B86B;
-    --today-100: #3A331C;
-    --dusk: #8B82E8;
-    --paper: #18171C;
-    --surface: #221F29;
-    --ink: #EFEDF2;
-    --ink-2: #B8B5C4;
-    --ink-3: #8D8A9B;
-    --line: #332F3E;
-    --line-strong: #423D4F;
-    --overdue: #FF8A80;  --overdue-bg: #3A1714;
-    --due-soon: #FFC266; --due-soon-bg: #3A2A10;
-    --ok: #7FD6A0;       --ok-bg: #133222;
-    --info: #8CC4F0;     --info-bg: #122838;
-    --shadow-sheet: 0 -8px 32px rgba(0, 0, 0, 0.5);
-    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.35);
-    --shadow-accent: 0 10px 24px -10px rgba(139, 130, 232, 0.4);
-    --shadow-hero: 0 20px 50px -16px rgba(139, 130, 232, 0.25);
-    color-scheme: dark;
+    --page: #F7F3EC;
+    --side: #FBF8F3;
+    --card: #FFFFFF;
+    --card-hover: #F3EEE4;
+    --hover: #F0EBE0;
+    --active-bg: #EDE6D8;
+    --chip: #EFE9DD;
+    --border: #E3DACB;
+    --border-soft: #EAE2D3;
+    --text: #2E1F3D;
+    --text-2: #6B5C78;
+    --text-3: #8C8094;
+    --indigo: #4F46B8;
+    --indigo-soft: #DAD5F7;
+    --coral: #B4492E;
+    --coral-hover: #9C3D25;
+    --coral-ink: #FFF7F2;
+    --green-bg: #E3F2E8;  --green-fg: #1E6B40;
+    --amber-bg: #FFF1DB;  --amber-fg: #9A5B00;
+    --red-bg:   #FBE9E7;  --red-fg:   #B3261E;
+    --info: #1F5C8A; --info-bg: #E5F0F8;
+    --shadow-sheet: 0 -8px 32px rgba(46, 31, 61, 0.14);
+    --shadow-card: 0 1px 2px rgba(46, 31, 61, 0.06), 0 8px 24px rgba(46, 31, 61, 0.08);
+    --shadow-accent: 0 10px 24px -10px rgba(180, 73, 46, 0.35);
+    --shadow-hero: 0 20px 50px -18px rgba(79, 70, 184, 0.25);
+    color-scheme: light;
   }
 }
