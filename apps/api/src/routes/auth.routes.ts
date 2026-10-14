@@ -15,7 +15,7 @@ import { revokeSession } from "../services/session.service.js";
 /** Route handlers stay thin: parse → call service → respond. */
 export function authRoutes(deps: Deps): Router {
   const r = Router();
-  const limiter = authLimiter(deps.env.RATE_LIMIT_AUTH_MAX);
+  const limiter = authLimiter(deps.env.RATE_LIMIT_AUTH_MAX, deps.redis);
   const meta = (req: { get(h: string): string | undefined; ip?: string | undefined }) => ({ userAgent: req.get("user-agent"), ip: req.ip });
 
   r.post("/signup", limiter, async (req, res) => {

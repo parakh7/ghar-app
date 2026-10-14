@@ -1,3 +1,4 @@
+import type { Redis } from "ioredis";
 import type { Env } from "../config/env.js";
 import type { Database } from "../db/client.js";
 import type { Clock } from "../lib/clock.js";
@@ -15,4 +16,5 @@ export type Deps = {
   email: EmailProvider;
   queue: Queue;
   errorReporter: ErrorReporter;
+  redis?: Redis;
 };
