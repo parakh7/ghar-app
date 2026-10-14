@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { CompletionStatus, MarkCompletionInput, TodayChecklistDTO } from "@household/shared";
-import { del, get, put } from "../../../lib/api";
+import { ApiError, del, get, put } from "../../../lib/api";
+import { enqueueMutation } from "../../../lib/offline-queue";
 
 type ChecklistCompletionRecordDTO = { date: string; status: CompletionStatus; note: string | null };
 
@@ -19,8 +20,25 @@ function invalidateChecklist(qc: ReturnType<typeof useQueryClient>, householdId:
 export function useMarkCompletion(householdId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ taskId, body }: { taskId: string; body: MarkCompletionInput }) =>
-      put<ChecklistCompletionRecordDTO>(`/households/${householdId}/checklist/${taskId}/completion`, body),
+    mutationFn: async ({ taskId, body }: { taskId: string; body: MarkCompletionInput }) => {
+      try {
+        return await put<ChecklistCompletionRecordDTO>(`/households/${householdId}/checklist/${taskId}/completion`, body);
+      } catch (err) {
+        if (!(err instanceof ApiError) || err.code !== "NETWORK_ERROR") throw err;
+        const clientMutationId = crypto.randomUUID();
+        await enqueueMutation({
+          type: "checklist", householdId, clientMutationId,
+          endpoint: `/households/${householdId}/checklist/${taskId}/completion`,
+          body: { ...body, clientMutationId },
+          pendingKey: `checklist:${taskId}:${body.date}`,
+          createdAt: new Date().toISOString(),
+        });
+        const optimistic: ChecklistCompletionRecordDTO = { date: body.date, status: body.status, note: body.note ?? null };
+        qc.setQueryData(["checklist", "today", householdId], (old: TodayChecklistDTO | undefined) =>
+          old ? { ...old, entries: old.entries.map((e) => (e.taskId === taskId ? { ...e, status: optimistic.status, note: optimistic.note } : e)) } : old);
+        return { data: optimistic, message: null };
+      }
+    },
     onSuccess: () => invalidateChecklist(qc, householdId),
   });
 }

@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AttendanceRecordDTO, MarkAttendanceInput, MarkHolidayResultDTO, MarkRemainingPresentResultDTO, TodayAttendanceDTO } from "@household/shared";
-import { del, get, post, put } from "../../../lib/api";
+import { ApiError, del, get, post, put } from "../../../lib/api";
+import { enqueueMutation } from "../../../lib/offline-queue";
 
 export function useTodayAttendance(householdId: string | undefined) {
   return useQuery({
@@ -20,8 +21,25 @@ function invalidateAttendance(qc: ReturnType<typeof useQueryClient>, householdId
 export function useSetAttendance(householdId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ househelpId, body }: { househelpId: string; body: MarkAttendanceInput }) =>
-      put<AttendanceRecordDTO>(`/households/${householdId}/attendance/${househelpId}`, body),
+    mutationFn: async ({ househelpId, body }: { househelpId: string; body: MarkAttendanceInput }) => {
+      try {
+        return await put<AttendanceRecordDTO>(`/households/${householdId}/attendance/${househelpId}`, body);
+      } catch (err) {
+        if (!(err instanceof ApiError) || err.code !== "NETWORK_ERROR") throw err;
+        const clientMutationId = crypto.randomUUID();
+        await enqueueMutation({
+          type: "attendance", householdId, clientMutationId,
+          endpoint: `/households/${householdId}/attendance/${househelpId}`,
+          body: { ...body, clientMutationId },
+          pendingKey: `attendance:${househelpId}:${body.date}`,
+          createdAt: new Date().toISOString(),
+        });
+        const optimistic: AttendanceRecordDTO = { date: body.date, status: body.status, note: body.note ?? null };
+        qc.setQueryData(["attendance", "today", householdId], (old: TodayAttendanceDTO | undefined) =>
+          old ? { ...old, entries: old.entries.map((e) => (e.househelpId === househelpId ? { ...e, status: optimistic.status, note: optimistic.note } : e)) } : old);
+        return { data: optimistic, message: null };
+      }
+    },
     onSuccess: (_data, { househelpId }) => invalidateAttendance(qc, householdId, househelpId),
   });
 }

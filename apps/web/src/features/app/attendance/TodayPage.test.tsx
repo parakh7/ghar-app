@@ -1,3 +1,4 @@
+import "fake-indexeddb/auto";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -77,6 +78,22 @@ describe("TodayPage", () => {
     expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining("1 already marked"));
     const postCall = fetchSpy.mock.calls.find(([u, init]) => String(u).endsWith("/attendance/holiday") && (init as RequestInit | undefined)?.method === "POST");
     expect(postCall).toBeDefined();
+  });
+
+  it("queues the mark and shows a pending badge when the PUT fails with a network error", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/households/h1")) return jsonResponse({ success: true, data: { ...HOUSEHOLD, permissions: ["attendance.view", "attendance.mark"] }, message: null });
+      if (init?.method === "PUT" && url.includes("/attendance/hh1")) throw new TypeError("Failed to fetch");
+      if (url.endsWith("/attendance/today")) {
+        return jsonResponse({ success: true, data: { date: "2026-09-29", entries: [{ househelpId: "hh1", name: "Sunita", roleTitle: "Cook", scheduledToday: true, status: null, note: null }] } }, 200);
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    }) as typeof fetch);
+    renderPage();
+    const row = await screen.findByText("Sunita");
+    await userEvent.click(row);
+    expect(await screen.findByLabelText("Not yet synced")).toBeInTheDocument();
   });
 
   it("hides marking controls for a VIEWER", async () => {

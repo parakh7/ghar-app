@@ -11,6 +11,7 @@ import { useHousehold } from "../members/useMembers";
 import { AttendancePicker } from "./AttendancePicker";
 import { STATUS_LABEL, toneOf } from "./statusTone";
 import { useClearAttendance, useMarkHoliday, useSetAttendance, useTodayAttendance } from "./useAttendance";
+import { usePendingKeys } from "../../../lib/offline-queue";
 
 function messageFrom(err: unknown): string {
   return err instanceof ApiError ? err.message : "Something went wrong. Please try again.";
@@ -24,6 +25,7 @@ export function TodayPage() {
   const setAttendance = useSetAttendance(householdId ?? "");
   const clearAttendance = useClearAttendance(householdId ?? "");
   const markHoliday = useMarkHoliday(householdId ?? "");
+  const pendingKeys = usePendingKeys();
   const canMark = householdQuery.data?.permissions.includes("attendance.mark") ?? false;
   const [openFor, setOpenFor] = useState<string | null>(null);
   const [pageError, setPageError] = useState<string | null>(null);
@@ -99,6 +101,9 @@ export function TodayPage() {
               >
                 {e.status ? STATUS_LABEL[e.status] : "Not marked"}
               </span>
+              {pendingKeys.has(`attendance:${e.househelpId}:${date}`) && (
+                <span className="badge badge--muted" aria-label="Not yet synced" title="Will sync when you're back online">⏳</span>
+              )}
               {canMark && <Button variant="ghost" onClick={() => setOpenFor(openFor === e.househelpId ? null : e.househelpId)}>More</Button>}
             </div>
             {openFor === e.househelpId && (

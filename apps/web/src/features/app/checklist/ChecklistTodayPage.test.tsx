@@ -1,3 +1,4 @@
+import "fake-indexeddb/auto";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -111,5 +112,21 @@ describe("ChecklistTodayPage", () => {
     await screen.findByText("Wash dishes");
     expect(screen.queryByRole("button", { name: "Skip" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "More" })).not.toBeInTheDocument();
+  });
+
+  it("queues the mark and shows a pending badge when the PUT fails with a network error", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/households/h1")) return jsonResponse({ success: true, data: { ...HOUSEHOLD, permissions: ["checklists.view", "checklists.complete"] }, message: null });
+      if (init?.method === "PUT" && url.includes("/checklist/t1/completion")) throw new TypeError("Failed to fetch");
+      if (url.endsWith("/checklist/today")) {
+        return jsonResponse({ success: true, data: { date: "2026-09-30", entries: [{ taskId: "t1", name: "Wash dishes", status: null, note: null }] } }, 200);
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    }) as typeof fetch);
+    renderPage();
+    const row = await screen.findByText("Wash dishes");
+    await userEvent.click(row);
+    expect(await screen.findByLabelText("Not yet synced")).toBeInTheDocument();
   });
 });

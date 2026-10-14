@@ -9,6 +9,7 @@ import { EmptyState } from "../../../components/EmptyState";
 import { useActiveHousehold } from "../useActiveHousehold";
 import { useHousehold } from "../members/useMembers";
 import { useClearCompletion, useMarkCompletion, useTodayChecklist } from "./useChecklistCompletion";
+import { usePendingKeys } from "../../../lib/offline-queue";
 
 type MarkableStatus = "COMPLETED" | "SKIPPED";
 
@@ -53,6 +54,7 @@ export function ChecklistTodayPage() {
   const todayQuery = useTodayChecklist(householdId);
   const markCompletion = useMarkCompletion(householdId ?? "");
   const clearCompletion = useClearCompletion(householdId ?? "");
+  const pendingKeys = usePendingKeys();
   const canMark = householdQuery.data?.permissions.includes("checklists.complete") ?? false;
   const [openFor, setOpenFor] = useState<string | null>(null);
   const [pageError, setPageError] = useState<string | null>(null);
@@ -136,6 +138,9 @@ export function ChecklistTodayPage() {
               >
                 {labelOf(e.status)}
               </button>
+              {pendingKeys.has(`checklist:${e.taskId}:${date}`) && (
+                <span className="badge badge--muted" aria-label="Not yet synced" title="Will sync when you're back online">⏳</span>
+              )}
               {canMark && <Button variant="ghost" onClick={() => setOpenFor(openFor === e.taskId ? null : e.taskId)}>More</Button>}
             </div>
             {openFor === e.taskId && (
