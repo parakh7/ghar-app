@@ -1,5 +1,11 @@
 # Daily Screens UX Redesign Implementation Plan
 
+> **Status: Superseded** by `docs/superpowers/specs/2026-10-14-ghar-home-redesign-design.md` — the
+> user provided a more complete design handoff covering tokens, shared components, shell/nav, and
+> the home page. Task 1 (tokens) partially landed as commit `aff4bf0` before this was superseded;
+> its values get corrected to the new spec's exact palette in the new plan's own Task 1. Tasks 2-3
+> (picker collapse, Home direct actions) were never built and are not part of the new plan's scope.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Replace the "Sunrise" gradient/orange-violet theme with a flat Indigo + Warm Gray palette and all-sans typography, and cut the tap count for daily attendance/checklist marking by adding direct one-tap actions to the Home dashboard and collapsing the Attendance/Checklist status picker from a 2-step expand-then-pick into a single native-select interaction.
