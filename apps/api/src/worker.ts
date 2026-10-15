@@ -1,3 +1,4 @@
+import { Resend } from "resend";
 import { loadEnv } from "./config/env.js";
 import { createDb, createPool } from "./db/client.js";
 import { runHeartbeat } from "./jobs/heartbeat.job.js";
@@ -8,13 +9,16 @@ import { systemClock } from "./lib/clock.js";
 import { createLogger } from "./lib/logger.js";
 import { BullMQQueue } from "./lib/queue.js";
 import { ConsoleEmailProvider, MemoryEmailProvider } from "./services/email/email.provider.js";
+import { ResendEmailProvider } from "./services/email/resend.provider.js";
 import type { Deps } from "./services/deps.js";
 
 const env = loadEnv();
 const logger = createLogger(env);
 const pool = createPool(env.DATABASE_URL, env.DATABASE_POOL_MAX);
 const db = createDb(pool);
-const email = env.EMAIL_PROVIDER === "memory" ? new MemoryEmailProvider() : new ConsoleEmailProvider(logger);
+const email = env.EMAIL_PROVIDER === "resend" ? new ResendEmailProvider(new Resend(env.RESEND_API_KEY), env.EMAIL_FROM, logger)
+  : env.EMAIL_PROVIDER === "memory" ? new MemoryEmailProvider()
+  : new ConsoleEmailProvider(logger);
 const errorReporter = new ConsoleErrorReporter(logger);
 
 // `{ consume: true }` is what starts job processing here: it makes BullMQQueue construct an

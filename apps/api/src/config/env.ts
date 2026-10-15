@@ -14,8 +14,9 @@ const envSchema = z.object({
   DATABASE_POOL_MAX: z.coerce.number().int().positive().default(20),
   REDIS_URL: z.string().url().default("redis://localhost:6379"),
   SESSION_TTL_DAYS: z.coerce.number().int().min(1).max(365).default(30),
-  EMAIL_PROVIDER: z.enum(["console", "memory"]).default("console"),
+  EMAIL_PROVIDER: z.enum(["console", "memory", "resend"]).default("console"),
   EMAIL_FROM: z.string().default(PLACEHOLDER_EMAIL_FROM),
+  RESEND_API_KEY: z.string().optional(),
   RATE_LIMIT_AUTH_MAX: z.coerce.number().int().positive().default(10),
   RATE_LIMIT_GLOBAL_MAX: z.coerce.number().int().positive().default(300),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
@@ -23,6 +24,9 @@ const envSchema = z.object({
 }).superRefine((env, ctx) => {
   if (env.NODE_ENV === "production" && env.EMAIL_FROM === PLACEHOLDER_EMAIL_FROM) {
     ctx.addIssue({ code: "custom", path: ["EMAIL_FROM"], message: "EMAIL_FROM must be set to a real sender address in production (the default placeholder is for development only)." });
+  }
+  if (env.EMAIL_PROVIDER === "resend" && !env.RESEND_API_KEY) {
+    ctx.addIssue({ code: "custom", path: ["RESEND_API_KEY"], message: "RESEND_API_KEY is required when EMAIL_PROVIDER=resend." });
   }
 });
 

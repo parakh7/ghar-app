@@ -1,4 +1,5 @@
 import { Redis } from "ioredis";
+import { Resend } from "resend";
 import { createApp } from "./app.js";
 import { loadEnv } from "./config/env.js";
 import { createDb, createPool } from "./db/client.js";
@@ -7,12 +8,15 @@ import { systemClock } from "./lib/clock.js";
 import { createLogger } from "./lib/logger.js";
 import { BullMQQueue } from "./lib/queue.js";
 import { ConsoleEmailProvider, MemoryEmailProvider } from "./services/email/email.provider.js";
+import { ResendEmailProvider } from "./services/email/resend.provider.js";
 
 const env = loadEnv();
 const logger = createLogger(env);
 const pool = createPool(env.DATABASE_URL, env.DATABASE_POOL_MAX);
 const db = createDb(pool);
-const email = env.EMAIL_PROVIDER === "memory" ? new MemoryEmailProvider() : new ConsoleEmailProvider(logger);
+const email = env.EMAIL_PROVIDER === "resend" ? new ResendEmailProvider(new Resend(env.RESEND_API_KEY), env.EMAIL_FROM, logger)
+  : env.EMAIL_PROVIDER === "memory" ? new MemoryEmailProvider()
+  : new ConsoleEmailProvider(logger);
 // `{ consume: false }` (the default): the API server only schedules/produces jobs via
 // `deps.queue` — it never registers a handler and never processes jobs itself. Job processing
 // belongs exclusively to the dedicated worker process (see `worker.ts`).

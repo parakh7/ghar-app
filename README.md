@@ -133,7 +133,7 @@ The root `docker-compose.yml` runs Redis (loopback-only, `127.0.0.1:6379`) for l
 
 Open <http://localhost:5173> and sign in as **parakh@example.com / demo-password-123**. The seed also creates *mother@example.com* and *father@example.com* (same password) as MEMBERs of "Shah Family". Mother has bill reminders switched off, to exercise per-user preferences in Phase 7.
 
-**Emails in development:** `EMAIL_PROVIDER=console` prints verification and reset emails, including their links, to the API log.
+**Emails in development:** `EMAIL_PROVIDER=console` prints verification, reset, and invite emails, including their links, to the API log. Set `EMAIL_PROVIDER=resend` and `RESEND_API_KEY` to send for real via [Resend](https://resend.com) — see `apps/api/.env.example` for the sandbox-mode caveat (no verified domain means it can only deliver to the email you signed up to Resend with).
 
 ## Environment variables
 
@@ -149,8 +149,9 @@ All variables are validated at startup (`apps/api/src/config/env.ts`); the API r
 | `DATABASE_URL` | — (required) | Postgres connection |
 | `TEST_DATABASE_URL` | `…/household_test` | Wiped on every test run; name must contain "test" |
 | `SESSION_TTL_DAYS` | `30` | Sliding session lifetime |
-| `EMAIL_PROVIDER` | `console` | `console` or `memory` (tests) |
+| `EMAIL_PROVIDER` | `console` | `console`, `memory` (tests), or `resend` (real delivery) |
 | `EMAIL_FROM` | — | Sender address |
+| `RESEND_API_KEY` | — | Required when `EMAIL_PROVIDER=resend` |
 | `RATE_LIMIT_AUTH_MAX` | `10` | Auth attempts per 15 min per IP + email |
 | `RATE_LIMIT_GLOBAL_MAX` | `300` | Requests per minute per IP |
 | `LOG_LEVEL` | `info` | pino level |
@@ -284,7 +285,7 @@ Any Node 20+ host plus managed Postgres (for example Render, Railway, Fly.io or 
 - Set `TRUST_PROXY` to the number of proxies in front of the API.
 - Health checks: `GET /api/health/live` (process) and `GET /api/health/ready` (includes DB).
 - The API shuts down gracefully on SIGTERM.
-- Replace `ConsoleEmailProvider` with a real provider (SES, Resend or Postmark) by implementing `EmailProvider`, and add the corresponding value to `EMAIL_PROVIDER`'s enum in `apps/api/src/config/env.ts` — two files, not one.
+- Set `EMAIL_PROVIDER=resend` and `RESEND_API_KEY` to send real email (verify a domain in the Resend dashboard first — sandbox mode can't deliver to arbitrary recipients). For a different provider (SES, Postmark), implement `EmailProvider` and add the value to `EMAIL_PROVIDER`'s enum in `apps/api/src/config/env.ts` — two files, not one.
 - Set `EMAIL_FROM` to a real sender address — the API refuses to start in production with the development placeholder.
 
 ## Troubleshooting

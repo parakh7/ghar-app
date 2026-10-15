@@ -17,4 +17,19 @@ describe("loadEnv", () => {
     const test = loadEnv({ NODE_ENV: "test", DATABASE_URL: "postgresql://x/y" });
     expect(test.EMAIL_FROM).toBe("Household <no-reply@example.com>");
   });
+
+  it("requires RESEND_API_KEY when EMAIL_PROVIDER=resend", () => {
+    expect(() => loadEnv({ DATABASE_URL: "postgresql://x/y", EMAIL_PROVIDER: "resend" })).toThrow(/RESEND_API_KEY/);
+  });
+
+  it("accepts EMAIL_PROVIDER=resend when RESEND_API_KEY is set", () => {
+    const env = loadEnv({ DATABASE_URL: "postgresql://x/y", EMAIL_PROVIDER: "resend", RESEND_API_KEY: "re_test_key" });
+    expect(env.EMAIL_PROVIDER).toBe("resend");
+    expect(env.RESEND_API_KEY).toBe("re_test_key");
+  });
+
+  it("does not require RESEND_API_KEY for console or memory providers", () => {
+    const console_ = loadEnv({ DATABASE_URL: "postgresql://x/y", EMAIL_PROVIDER: "console" });
+    expect(console_.RESEND_API_KEY).toBeUndefined();
+  });
 });
