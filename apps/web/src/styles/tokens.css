@@ -17,9 +17,9 @@
   --text-3: #9C948D;
   --indigo: #3B3382;
   --indigo-soft: #B9AFF8;
-  --coral: #F4906F;       /* reserved for actions — never decoration */
-  --coral-hover: #F7A284;
-  --coral-ink: #2E1209;
+  --accent: #A99BFF;       /* reserved for actions — never decoration. Kept clear of the status hues (amber/green/red). */
+  --accent-hover: #B8ADFF;
+  --accent-ink: #1B1530;
   --green-bg: #1E3A2C;  --green-fg: #8FD4A8;
   --amber-bg: #3D3115;  --amber-fg: #F2C867;
   --red-bg:   #43212A;  --red-fg:   #FFA394;
@@ -27,8 +27,8 @@
   /* legacy token names — aliased onto the palette above so existing components keep working
      unchanged until they're rebuilt against the canonical names directly. */
   --accent-900: var(--indigo);
-  --accent-700: var(--coral);
-  --accent-600: var(--coral-hover);
+  --accent-700: var(--accent);
+  --accent-600: var(--accent-hover);
   --accent-100: var(--indigo-soft);
   --accent-50:  var(--hover);
   --today-500: var(--amber-fg);
@@ -67,7 +67,7 @@
 
   --shadow-sheet: 0 -8px 32px rgba(0, 0, 0, 0.5);
   --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.35);
-  --shadow-accent: 0 10px 24px -10px rgba(244, 144, 111, 0.4);
+  --shadow-accent: 0 10px 24px -10px rgba(169, 155, 255, 0.4);
   --shadow-hero: 0 20px 50px -18px rgba(185, 175, 248, 0.3);
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
   --dur: 180ms;
@@ -98,16 +98,16 @@
     --text-3: #8C8094;
     --indigo: #4F46B8;
     --indigo-soft: #DAD5F7;
-    --coral: #B4492E;
-    --coral-hover: #9C3D25;
-    --coral-ink: #FFF7F2;
+    --accent: #6A54D6;
+    --accent-hover: #5B47BE;
+    --accent-ink: #FBFAFF;
     --green-bg: #E3F2E8;  --green-fg: #1E6B40;
     --amber-bg: #FFF1DB;  --amber-fg: #9A5B00;
     --red-bg:   #FBE9E7;  --red-fg:   #B3261E;
     --info: #1F5C8A; --info-bg: #E5F0F8;
     --shadow-sheet: 0 -8px 32px rgba(46, 31, 61, 0.14);
     --shadow-card: 0 1px 2px rgba(46, 31, 61, 0.06), 0 8px 24px rgba(46, 31, 61, 0.08);
-    --shadow-accent: 0 10px 24px -10px rgba(180, 73, 46, 0.35);
+    --shadow-accent: 0 10px 24px -10px rgba(106, 84, 214, 0.35);
     --shadow-hero: 0 20px 50px -18px rgba(79, 70, 184, 0.25);
     color-scheme: light;
   }

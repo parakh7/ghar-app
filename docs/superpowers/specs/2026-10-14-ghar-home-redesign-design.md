@@ -15,6 +15,12 @@
   functions already computing household-wide data internally — not new endpoints.
 - Execution is staged as 5 tasks, each committed, tested, and merged before the next: (1) tokens,
   (2) shared components, (3) shell/nav rebuild, (4) `/today` API extension, (5) home page rebuild.
+- **2026-10-15 revision:** the accent swapped from coral (`#F4906F`) to a soft violet (`#A99BFF`,
+  dark text `#1B1530`) — amber/green/red already carry status meaning, so an accent in any of those
+  hues risked reading as a status rather than an action. Token renamed `--coral`/`--coral-hover`/
+  `--coral-ink` → `--accent`/`--accent-hover`/`--accent-ink` to match (the CSS block below and the
+  rest of this doc reflect the new name/values). Trade-off: the accent now sits close to the indigo
+  brand colour, so the page reads more monochrome than the original coral-on-indigo-warm-gray plan.
 
 Save this file as `C:/ClaudeCodes/household-app/DESIGN_HANDOFF.md`, open that folder in Claude Code, and paste the prompt at the bottom.
 
@@ -47,10 +53,10 @@ Define these once as design tokens (CSS variables or the project's theme config)
   --indigo: #3B3382;
   --indigo-soft: #B9AFF8;
   --focus: #B9AFF8;
-  /* action accent (coral), reserved for actions and active state */
-  --coral: #F4906F;
-  --coral-hover: #F7A284;
-  --coral-ink: #2E1209;
+  /* action accent (soft violet), reserved for actions and active state */
+  --accent: #A99BFF;
+  --accent-hover: #B8ADFF;
+  --accent-ink: #1B1530;
   /* status */
   --green-bg: #1E3A2C;  --green-fg: #8FD4A8;   /* paid, done, all clear */
   --amber-bg: #3D3115;  --amber-fg: #F2C867;   /* upcoming, pending */
@@ -59,12 +65,12 @@ Define these once as design tokens (CSS variables or the project's theme config)
 ```
 
 Rules:
-- Coral is for actions (links, primary buttons, active nav, icons in quick actions) and never for decoration.
-- One filled coral button per view. Everything else is outlined or ghost.
+- The accent is for actions (links, primary buttons, active nav, icons in quick actions) and never for decoration.
+- One filled accent button per view. Everything else is outlined or ghost.
 - Status is always shown with text, not colour alone.
 - Visible keyboard focus: `outline: 2px solid var(--focus); outline-offset: 2px`.
 - Respect `prefers-reduced-motion`. Hover and press transitions only.
-- Optional later: a light theme using the same token names (cream surfaces, plum text, terracotta `#B4492E` for text-on-light actions).
+- Optional later: a light theme using the same token names (cream surfaces, plum text, a deeper violet `#6A54D6` for text-on-light actions).
 
 ## 2. Type, spacing, shape
 
@@ -111,7 +117,7 @@ Last 4 or so events from existing data (payments, attendance marks, checklist co
 
 ## 4. Navigation
 
-- Desktop sidebar groups: **Main** (Home, Househelps, Checklist, Calendar, Bills, Salaries) and **More** (Reports, Family members, Settings). Household switcher at the top, profile row at the bottom, collapse button. Active item uses `--active-bg` and coral text with `aria-current="page"`. No left-border accents.
+- Desktop sidebar groups: **Main** (Home, Househelps, Checklist, Calendar, Bills, Salaries) and **More** (Reports, Family members, Settings). Household switcher at the top, profile row at the bottom, collapse button. Active item uses `--active-bg` and accent-coloured text with `aria-current="page"`. No left-border accents.
 - Mobile: compact top bar (household switcher, notifications, profile) and a sticky bottom bar with Home, Househelps, Checklist, Bills, More. Calendar and Salaries sit under More on mobile. Pad the bottom bar with `env(safe-area-inset-bottom)`. No horizontal overflow at 360 and 390px.
 
 ## 5. Components to build (shared, presentational)
