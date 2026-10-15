@@ -93,7 +93,7 @@ export function MembersPage() {
         <>
           <h2 className="section-title">Pending invites</h2>
           <div className="list">
-            {invitesQuery.data?.length === 0 && <p className="list__meta" style={{ padding: "var(--space-3) 0" }}>No pending invites.</p>}
+            {invitesQuery.data?.length === 0 && <p className="list__meta" style={{ padding: "var(--space-3) var(--space-4)" }}>No pending invites.</p>}
             {invitesQuery.data?.map((inv) => (
               <div key={inv.id} className="list__item">
                 <span className="list__text">
