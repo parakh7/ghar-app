@@ -75,6 +75,9 @@ export function AppShell() {
       <header className="shell__topbar">
         <HouseholdSwitcher compact />
         <div className="shell__topbar-actions">
+          <NavLink to="/search" className="shell__topbar-icon" aria-label="Open search">
+            <Search size={20} aria-hidden strokeWidth={2} />
+          </NavLink>
           <NavLink to="/notifications" className="shell__bell" aria-label="Notifications">
             <Bell size={22} aria-hidden strokeWidth={2} />
             <NotificationBadge count={unreadCount} />
@@ -82,9 +85,6 @@ export function AppShell() {
           <Link to="/more" className="shell__avatar" aria-label="View profile">{initials(name)}</Link>
         </div>
       </header>
-      <NavLink to="/search" className="shell__mobile-search" aria-label="Open search">
-        <Search size={20} aria-hidden strokeWidth={2} />
-      </NavLink>
 
       <nav className="shell__sidebar" aria-label="Sidebar">
         <div className="shell__sidebar-head">
