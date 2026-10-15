@@ -45,7 +45,7 @@ function HouseholdSwitcher({ compact }: { compact?: boolean }) {
     <div className="shell__switcher">
       <button type="button" className="shell__switcher-trigger" onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-haspopup="true">
         {!compact && <span className="shell__switcher-label">Household</span>}
-        <span className="shell__switcher-name">{household.name}</span>
+        <span className="shell__switcher-name" title={household.name}>{household.name}</span>
         <ChevronDown size={16} aria-hidden strokeWidth={2} />
       </button>
       {open && (

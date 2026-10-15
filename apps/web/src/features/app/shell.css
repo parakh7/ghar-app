@@ -48,8 +48,8 @@
   padding: 0 var(--space-3); background: none; border: 1px solid var(--border); border-radius: var(--radius-sm);
   color: var(--text); cursor: pointer; text-align: left;
 }
-.shell__switcher-label { font-size: var(--text-xs); color: var(--text-3); display: block; }
-.shell__switcher-name { flex: 1; font-weight: 700; }
+.shell__switcher-label { flex: none; font-size: var(--text-xs); color: var(--text-3); white-space: nowrap; }
+.shell__switcher-name { flex: 1; min-width: 0; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .shell__switcher-panel {
   position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 10;
   background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-sm); box-shadow: var(--shadow-card);
