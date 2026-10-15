@@ -1,23 +1,25 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useActiveHousehold } from "../app/useActiveHousehold";
 import { useDebouncedValue } from "./useDebouncedValue";
 import { useSearch } from "./useSearch";
 
+/**
+ * Keyed by the URL's own ?q= so a second search (e.g. via the sidebar's SearchInput navigating to
+ * a new query while already on this route) gets a fresh SearchResults instance instead of trying to
+ * resync local state by hand — React's own remount semantics, no extra effect to get wrong.
+ */
 export function SearchPage() {
-  const { household } = useActiveHousehold();
   const [searchParams] = useSearchParams();
   const urlQuery = searchParams.get("q") ?? "";
-  const [input, setInput] = useState(urlQuery);
-  // Resyncs when the URL's own ?q= changes from outside this page (e.g. the sidebar search box
-  // navigating to a new query while SearchPage is already mounted — same route, no remount, so the
-  // useState initializer above only ever ran once and would otherwise go stale on a second search).
-  useEffect(() => { setInput(urlQuery); }, [urlQuery]);
+  return <SearchResults key={urlQuery} initialQuery={urlQuery} />;
+}
+
+function SearchResults({ initialQuery }: { initialQuery: string }) {
+  const { household } = useActiveHousehold();
+  const [input, setInput] = useState(initialQuery);
   const debounced = useDebouncedValue(input, 300);
   const results = useSearch(household?.id, debounced).data;
-
-  // eslint-disable-next-line no-console
-  console.log("[DEBUG] SearchPage render", { urlQuery, input, debounced, householdId: household?.id, resultsKeys: results && Object.keys(results) });
 
   return (
     <>
@@ -35,7 +37,7 @@ export function SearchPage() {
           <h2 className="section-title">Househelps</h2>
           <div className="list">
             {results.househelps.map((h) => (
-              <Link key={h.id} to={`/househelps/${h.id}`} className="list__item" onClick={() => console.log("[DEBUG] househelp link clicked", h.id)}><span className="list__label">{h.name}</span></Link>
+              <Link key={h.id} to={`/househelps/${h.id}`} className="list__item"><span className="list__label">{h.name}</span></Link>
             ))}
           </div>
         </>
