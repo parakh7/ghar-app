@@ -17,6 +17,8 @@ const envSchema = z.object({
   EMAIL_PROVIDER: z.enum(["console", "memory", "resend"]).default("console"),
   EMAIL_FROM: z.string().default(PLACEHOLDER_EMAIL_FROM),
   RESEND_API_KEY: z.string().optional(),
+  JOB_RUNNER: z.enum(["bullmq", "http"]).default("bullmq"),
+  JOBS_SECRET: z.string().optional(),
   RATE_LIMIT_AUTH_MAX: z.coerce.number().int().positive().default(10),
   RATE_LIMIT_GLOBAL_MAX: z.coerce.number().int().positive().default(300),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
@@ -27,6 +29,9 @@ const envSchema = z.object({
   }
   if (env.EMAIL_PROVIDER === "resend" && !env.RESEND_API_KEY) {
     ctx.addIssue({ code: "custom", path: ["RESEND_API_KEY"], message: "RESEND_API_KEY is required when EMAIL_PROVIDER=resend." });
+  }
+  if (env.JOB_RUNNER === "http" && !env.JOBS_SECRET) {
+    ctx.addIssue({ code: "custom", path: ["JOBS_SECRET"], message: "JOBS_SECRET is required when JOB_RUNNER=http." });
   }
 });
 

@@ -11,6 +11,7 @@ import { requestContext } from "./middleware/request-context.js";
 import { authRoutes } from "./routes/auth.routes.js";
 import { healthRoutes } from "./routes/health.routes.js";
 import { householdRoutes } from "./routes/household.routes.js";
+import { internalRoutes } from "./routes/internal.routes.js";
 import { inviteRoutes } from "./routes/invite.routes.js";
 import type { Deps } from "./services/deps.js";
 
@@ -38,6 +39,9 @@ export function createApp(deps: Deps): Express {
   app.use(cookieParser());
 
   app.use("/api/health", healthRoutes(deps));
+  // Hit by an external cron, not a signed-in browser — no session cookie or CSRF header to give,
+  // so this must sit before csrfProtection/authenticate. Its own x-jobs-secret check stands in.
+  if (deps.env.JOB_RUNNER === "http") app.use("/api/internal", internalRoutes(deps));
   app.use("/api", globalLimiter(deps.env.RATE_LIMIT_GLOBAL_MAX, deps.redis));
   app.use("/api", csrfProtection(origins));
   app.use("/api", authenticate(deps));

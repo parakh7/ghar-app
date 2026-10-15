@@ -6,7 +6,7 @@ import { createDb, createPool } from "./db/client.js";
 import { ConsoleErrorReporter } from "./lib/error-reporter.js";
 import { systemClock } from "./lib/clock.js";
 import { createLogger } from "./lib/logger.js";
-import { BullMQQueue } from "./lib/queue.js";
+import { BullMQQueue, FakeQueue, type Queue } from "./lib/queue.js";
 import { ConsoleEmailProvider, MemoryEmailProvider } from "./services/email/email.provider.js";
 import { ResendEmailProvider } from "./services/email/resend.provider.js";
 
@@ -19,8 +19,10 @@ const email = env.EMAIL_PROVIDER === "resend" ? new ResendEmailProvider(new Rese
   : new ConsoleEmailProvider(logger);
 // `{ consume: false }` (the default): the API server only schedules/produces jobs via
 // `deps.queue` — it never registers a handler and never processes jobs itself. Job processing
-// belongs exclusively to the dedicated worker process (see `worker.ts`).
-const queue = new BullMQQueue(env, logger, { consume: false });
+// belongs exclusively to the dedicated worker process (see `worker.ts`). In JOB_RUNNER=http mode
+// there's no worker process at all — jobs run via the /api/internal/run-jobs route instead — so
+// deps.queue is a true no-op there rather than an unused BullMQ/Redis connection.
+const queue: Queue = env.JOB_RUNNER === "http" ? new FakeQueue() : new BullMQQueue(env, logger, { consume: false });
 const errorReporter = new ConsoleErrorReporter(logger);
 const redis = new Redis(env.REDIS_URL);
 redis.on("error", (err) => logger.error({ err }, "rate-limit redis error"));

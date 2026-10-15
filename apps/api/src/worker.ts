@@ -14,6 +14,12 @@ import type { Deps } from "./services/deps.js";
 
 const env = loadEnv();
 const logger = createLogger(env);
+
+if (env.JOB_RUNNER !== "bullmq") {
+  logger.warn({ jobRunner: env.JOB_RUNNER }, "JOB_RUNNER is not \"bullmq\" — this worker process has nothing to consume (jobs run via /api/internal/run-jobs instead); exiting");
+  process.exit(0);
+}
+
 const pool = createPool(env.DATABASE_URL, env.DATABASE_POOL_MAX);
 const db = createDb(pool);
 const email = env.EMAIL_PROVIDER === "resend" ? new ResendEmailProvider(new Resend(env.RESEND_API_KEY), env.EMAIL_FROM, logger)

@@ -156,7 +156,9 @@ All variables are validated at startup (`apps/api/src/config/env.ts`); the API r
 | `RATE_LIMIT_GLOBAL_MAX` | `300` | Requests per minute per IP |
 | `LOG_LEVEL` | `info` | pino level |
 | `LOG_PRETTY` | dev: `true` | Human-readable logs |
-| `REDIS_URL` | `redis://localhost:6379` | BullMQ job queue (Phase 7) |
+| `REDIS_URL` | `redis://localhost:6379` | BullMQ job queue, used when `JOB_RUNNER=bullmq` |
+| `JOB_RUNNER` | `bullmq` | `bullmq` (dedicated worker process) or `http` (external cron hits `/api/internal/run-jobs` instead — no worker/Redis needed for jobs) |
+| `JOBS_SECRET` | — | Required when `JOB_RUNNER=http`; sent as the `x-jobs-secret` header |
 | `VAPID_*` | — | Reserved for Phase 7 (web push, deferred) |
 | `VITE_API_URL` (web) | same origin | Only if the API is on a different origin |
 
@@ -287,6 +289,7 @@ Any Node 20+ host plus managed Postgres (for example Render, Railway, Fly.io or 
 - The API shuts down gracefully on SIGTERM.
 - Set `EMAIL_PROVIDER=resend` and `RESEND_API_KEY` to send real email (verify a domain in the Resend dashboard first — sandbox mode can't deliver to arbitrary recipients). For a different provider (SES, Postmark), implement `EmailProvider` and add the value to `EMAIL_PROVIDER`'s enum in `apps/api/src/config/env.ts` — two files, not one.
 - Set `EMAIL_FROM` to a real sender address — the API refuses to start in production with the development placeholder.
+- Background jobs: `JOB_RUNNER=bullmq` (default) needs a persistent worker process (`npm run worker`) and Redis — not available on hosts whose free tier only offers web services (e.g. Render). `JOB_RUNNER=http` with `JOBS_SECRET` set needs neither — point an external cron (every 5-15 min) at `POST /api/internal/run-jobs` with header `x-jobs-secret: <JOBS_SECRET>` instead. Don't run the worker process in `http` mode; it has nothing to consume.
 
 ## Troubleshooting
 

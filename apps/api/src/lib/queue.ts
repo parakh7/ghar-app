@@ -16,6 +16,8 @@ export interface Queue {
   registerHandler(jobName: string, handler: JobHandler): void;
   /** Schedules `jobName` to run every `everyMs` milliseconds, passing it `data` each time. */
   scheduleRepeating(jobName: string, data: unknown, everyMs: number): Promise<void>;
+  /** Releases any held connections; call during process shutdown. */
+  close(): Promise<void>;
 }
 
 export interface BullMQQueueOptions {
@@ -75,7 +77,11 @@ export class BullMQQueue implements Queue {
 
 type RepeatingCall = { jobName: string; data: unknown; everyMs: number };
 
-/** Test fake: records scheduling calls and lets tests invoke a registered handler synchronously. */
+/**
+ * Test fake: records scheduling calls and lets tests invoke a registered handler synchronously.
+ * Also doubles as the real `deps.queue` for JOB_RUNNER=http (server.ts) — true no-op is exactly
+ * what that mode needs, since jobs run via the internal HTTP route instead of BullMQ there.
+ */
 export class FakeQueue implements Queue {
   private readonly handlers = new Map<string, JobHandler>();
   readonly scheduled: RepeatingCall[] = [];
@@ -87,6 +93,8 @@ export class FakeQueue implements Queue {
   async scheduleRepeating(jobName: string, data: unknown, everyMs: number): Promise<void> {
     this.scheduled.push({ jobName, data, everyMs });
   }
+
+  async close(): Promise<void> {}
 
   /** Test-only: synchronously runs a registered job's handler, as if it had just fired. */
   async runHandler(jobName: string, data: unknown): Promise<void> {

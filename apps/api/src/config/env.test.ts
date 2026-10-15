@@ -32,4 +32,20 @@ describe("loadEnv", () => {
     const console_ = loadEnv({ DATABASE_URL: "postgresql://x/y", EMAIL_PROVIDER: "console" });
     expect(console_.RESEND_API_KEY).toBeUndefined();
   });
+
+  it("defaults JOB_RUNNER to bullmq, no JOBS_SECRET required", () => {
+    const env = loadEnv({ DATABASE_URL: "postgresql://x/y" });
+    expect(env.JOB_RUNNER).toBe("bullmq");
+    expect(env.JOBS_SECRET).toBeUndefined();
+  });
+
+  it("requires JOBS_SECRET when JOB_RUNNER=http", () => {
+    expect(() => loadEnv({ DATABASE_URL: "postgresql://x/y", JOB_RUNNER: "http" })).toThrow(/JOBS_SECRET/);
+  });
+
+  it("accepts JOB_RUNNER=http when JOBS_SECRET is set", () => {
+    const env = loadEnv({ DATABASE_URL: "postgresql://x/y", JOB_RUNNER: "http", JOBS_SECRET: "s3cret" });
+    expect(env.JOB_RUNNER).toBe("http");
+    expect(env.JOBS_SECRET).toBe("s3cret");
+  });
 });
