@@ -16,6 +16,9 @@ export function SearchPage() {
   const debounced = useDebouncedValue(input, 300);
   const results = useSearch(household?.id, debounced).data;
 
+  // eslint-disable-next-line no-console
+  console.log("[DEBUG] SearchPage render", { urlQuery, input, debounced, householdId: household?.id, resultsKeys: results && Object.keys(results) });
+
   return (
     <>
       <header className="page-head"><h1 className="page-title">Search</h1></header>
@@ -32,7 +35,7 @@ export function SearchPage() {
           <h2 className="section-title">Househelps</h2>
           <div className="list">
             {results.househelps.map((h) => (
-              <Link key={h.id} to={`/househelps/${h.id}`} className="list__item"><span className="list__label">{h.name}</span></Link>
+              <Link key={h.id} to={`/househelps/${h.id}`} className="list__item" onClick={() => console.log("[DEBUG] househelp link clicked", h.id)}><span className="list__label">{h.name}</span></Link>
             ))}
           </div>
         </>

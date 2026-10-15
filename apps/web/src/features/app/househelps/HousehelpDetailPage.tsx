@@ -25,6 +25,8 @@ export function HousehelpDetailPage() {
   const canManage = householdQuery.data?.permissions.includes("househelps.manage") ?? false;
   const [pageError, setPageError] = useState<string | null>(null);
 
+  console.log("[DEBUG] HousehelpDetailPage render", { id, householdId, hasData: !!househelpQuery.data, error: househelpQuery.error });
+
   function onArchive() {
     if (!window.confirm(`Remove ${househelpQuery.data?.name}? Their history stays, but they'll drop off the main list.`)) return;
     archive.mutate(id!, { onError: (err) => setPageError(messageFrom(err)) });
