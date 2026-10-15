@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useActiveHousehold } from "../app/useActiveHousehold";
 import { useDebouncedValue } from "./useDebouncedValue";
@@ -7,7 +7,12 @@ import { useSearch } from "./useSearch";
 export function SearchPage() {
   const { household } = useActiveHousehold();
   const [searchParams] = useSearchParams();
-  const [input, setInput] = useState(searchParams.get("q") ?? "");
+  const urlQuery = searchParams.get("q") ?? "";
+  const [input, setInput] = useState(urlQuery);
+  // Resyncs when the URL's own ?q= changes from outside this page (e.g. the sidebar search box
+  // navigating to a new query while SearchPage is already mounted — same route, no remount, so the
+  // useState initializer above only ever ran once and would otherwise go stale on a second search).
+  useEffect(() => { setInput(urlQuery); }, [urlQuery]);
   const debounced = useDebouncedValue(input, 300);
   const results = useSearch(household?.id, debounced).data;
 
@@ -17,7 +22,10 @@ export function SearchPage() {
       <input
         type="search" value={input} onChange={(e) => setInput(e.target.value)}
         placeholder="Search househelps, bills, checklist, members" aria-label="Search"
-        style={{ width: "100%", height: "var(--touch)", padding: "0 var(--space-3)", borderRadius: "var(--radius-sm)", border: "1.5px solid var(--line-strong)", marginBottom: "var(--space-4)" }}
+        style={{
+          width: "100%", height: "var(--touch)", padding: "0 var(--space-3)", borderRadius: "var(--radius-sm)",
+          border: "1.5px solid var(--line-strong)", marginBottom: "var(--space-4)", background: "var(--card)", color: "var(--text)",
+        }}
       />
       {results?.househelps && (
         <>
