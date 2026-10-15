@@ -19,13 +19,13 @@
   background: var(--card); border-bottom: 1px solid var(--border);
 }
 .shell__topbar-actions { display: flex; align-items: center; gap: var(--space-3); flex: none; }
+.shell__topbar-icon { display: flex; color: var(--text-2); }
 .shell__bell { position: relative; display: flex; color: var(--text-2); }
 .badge-count {
   position: absolute; top: -4px; right: -6px; min-width: 16px; height: 16px; padding: 0 4px;
   border-radius: 999px; background: var(--accent); color: var(--accent-ink); font-size: 10px; font-weight: 700;
   display: flex; align-items: center; justify-content: center; line-height: 1;
 }
-.shell__mobile-search { display: none; }
 
 /* mobile: bottom tab bar */
 .shell__bottom-nav {
@@ -71,7 +71,7 @@
 @media (min-width: 900px) {
   .shell { display: grid; grid-template-columns: 256px 1fr; }
   .shell__main { padding: var(--space-10) var(--space-10) var(--space-12); margin: 0; max-width: 1200px; }
-  .shell__topbar, .shell__bottom-nav, .shell__mobile-search { display: none; }
+  .shell__topbar, .shell__bottom-nav { display: none; }
 
   .shell__sidebar {
     display: flex; flex-direction: column; position: sticky; top: 0; height: 100dvh; overflow-y: auto;
