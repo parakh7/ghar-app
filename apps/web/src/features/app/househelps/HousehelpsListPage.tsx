@@ -41,11 +41,11 @@ export function HousehelpsListPage() {
     <>
       <header className="page-head"><h1 className="page-title">Househelps</h1></header>
 
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "var(--space-4)" }}>
+      <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", gap: "var(--space-3)", marginBottom: "var(--space-4)" }}>
         <button type="button" className="chip" aria-pressed={showArchived} onClick={() => setShowArchived((v) => !v)}>
           {showArchived ? "Showing archived" : "Show archived"}
         </button>
-        <div style={{ display: "flex", gap: "var(--space-4)" }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-4)" }}>
           <Link to="/attendance" className="list__label">Today's attendance</Link>
           {canManageCategories && <Link to="/househelps/categories" className="list__label">Manage categories</Link>}
         </div>
