@@ -1,0 +1,23 @@
+name: run-jobs
+
+# Pings the API's internal job-runner endpoint on a schedule — the free-hosting alternative to a
+# persistent BullMQ worker (see docs/superpowers/specs/2026-10-15-http-job-runner-design.md and
+# README's "Background jobs" section). Requires the API to be deployed with JOB_RUNNER=http and
+# JOBS_SECRET set, and this repo's Actions secret JOBS_SECRET to match.
+#
+# GitHub's schedule trigger is best-effort and can run a few minutes late under load — fine for
+# reminders, not a precision guarantee.
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run scheduled jobs
+        run: |
+          curl --fail --silent --show-error \
+            -X POST "${{ vars.JOBS_API_URL }}/api/internal/run-jobs" \
+            -H "x-jobs-secret: ${{ secrets.JOBS_SECRET }}"
