@@ -16,6 +16,8 @@ export type MeDTO = { user: UserDTO; households: HouseholdSummaryDTO[] };
 
 export type MemberDTO = { userId: string; name: string; email: string; role: HouseholdRole; displayName: string | null; joinedAt: string };
 export type InviteDTO = { id: string; email: string; role: HouseholdRole; expiresAt: string; createdAt: string };
+/** Only createInvite/resendInvite return the link — by design, listInvites never re-exposes it. */
+export type InviteWithLinkDTO = InviteDTO & { link: string };
 
 export type CategoryDTO = { id: string; name: string; sortOrder: number; isActive: boolean };
 export type BillCategoryDTO = { id: string; name: string; icon: string | null; sortOrder: number; isActive: boolean };

@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Mail, Trash2, UserMinus } from "lucide-react";
+import { Check, Copy, Mail, MessageCircle, Trash2, UserMinus, X } from "lucide-react";
 import type { HouseholdRole } from "@household/shared";
 import { inviteMemberSchema } from "@household/shared";
 import { ApiError } from "../../../lib/api";
@@ -21,6 +21,13 @@ function messageFrom(err: unknown): string {
   return err instanceof ApiError ? err.message : "Something went wrong. Please try again.";
 }
 
+type RevealedInvite = { email: string; role: HouseholdRole; link: string; name: string };
+
+function buildInviteMessage(inv: RevealedInvite, householdName: string): string {
+  const greeting = inv.name ? `Hi ${inv.name}! ` : "Hi! ";
+  return `${greeting}You've been invited to join *${householdName}* on Ghar as ${ROLE_LABEL[inv.role]}. Tap to accept: ${inv.link}`;
+}
+
 export function MembersPage() {
   const { household: active } = useActiveHousehold();
   const householdId = active?.id;
@@ -36,8 +43,12 @@ export function MembersPage() {
   const removeMember = useRemoveMember(householdId ?? "");
 
   const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
   const [role, setRole] = useState<HouseholdRole>("MEMBER");
   const [pageError, setPageError] = useState<string | null>(null);
+  const [inviteNames, setInviteNames] = useState<Record<string, string>>({});
+  const [revealedInvite, setRevealedInvite] = useState<RevealedInvite | null>(null);
+  const [copied, setCopied] = useState(false);
   const errors = useFormErrors();
 
   function onInvite(e: FormEvent) {
@@ -45,7 +56,37 @@ export function MembersPage() {
     errors.clear();
     const parsed = inviteMemberSchema.safeParse({ email, role });
     if (!parsed.success) return errors.setFields(zodFieldErrors(parsed.error));
-    inviteMember.mutate(parsed.data, { onSuccess: () => { setEmail(""); setRole("MEMBER"); }, onError: errors.fromError });
+    const trimmedName = name.trim();
+    inviteMember.mutate(parsed.data, {
+      onSuccess: ({ data: invite }) => {
+        if (trimmedName) setInviteNames((prev) => ({ ...prev, [parsed.data.email]: trimmedName }));
+        setRevealedInvite({ email: invite.email, role: invite.role, link: invite.link, name: trimmedName });
+        setCopied(false);
+        setEmail(""); setName(""); setRole("MEMBER");
+      },
+      onError: errors.fromError,
+    });
+  }
+
+  function onResend(inviteId: string, inviteEmail: string, inviteRole: HouseholdRole) {
+    resendInvite.mutate(inviteId, {
+      onSuccess: ({ data: invite }) => {
+        setRevealedInvite({ email: inviteEmail, role: inviteRole, link: invite.link, name: inviteNames[inviteEmail] ?? "" });
+        setCopied(false);
+      },
+      onError: (err) => setPageError(messageFrom(err)),
+    });
+  }
+
+  async function copyLink(link: string) {
+    await navigator.clipboard.writeText(link);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
+  function shareOnWhatsApp(inv: RevealedInvite, householdName: string) {
+    const url = `https://wa.me/?text=${encodeURIComponent(buildInviteMessage(inv, householdName))}`;
+    window.open(url, "_blank", "noopener,noreferrer");
   }
 
   if (!householdId) return null;
@@ -54,6 +95,23 @@ export function MembersPage() {
     <>
       <header className="page-head"><h1 className="page-title">Members</h1></header>
       {pageError && <Alert tone="error" title={pageError} />}
+
+      {revealedInvite && (
+        <Alert tone="success" title={`Invite ready for ${revealedInvite.email}`}>
+          <p className="list__meta" style={{ marginBottom: "var(--space-3)" }}>
+            This link is shown once — share it directly since the invite email may not reach every inbox.
+          </p>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "var(--space-2)" }}>
+            <Button variant="secondary" icon={<MessageCircle size={18} aria-hidden />} onClick={() => shareOnWhatsApp(revealedInvite, householdQuery.data?.name ?? "Ghar")}>
+              Share via WhatsApp
+            </Button>
+            <Button variant="ghost" icon={copied ? <Check size={18} aria-hidden /> : <Copy size={18} aria-hidden />} onClick={() => copyLink(revealedInvite.link)}>
+              {copied ? "Copied!" : "Copy link"}
+            </Button>
+            <Button variant="ghost" icon={<X size={18} aria-hidden />} aria-label="Dismiss" onClick={() => setRevealedInvite(null)} />
+          </div>
+        </Alert>
+      )}
 
       <h2 className="section-title">Active members</h2>
       <div className="list">
@@ -101,7 +159,7 @@ export function MembersPage() {
                   <span className="list__meta">Invited as {ROLE_LABEL[inv.role]}</span>
                 </span>
                 <span style={{ display: "flex", gap: "var(--space-2)" }}>
-                  <Button variant="ghost" icon={<Mail size={20} aria-hidden />} loading={resendInvite.isPending} onClick={() => resendInvite.mutate(inv.id, { onError: (err) => setPageError(messageFrom(err)) })}>Resend</Button>
+                  <Button variant="ghost" icon={<Mail size={20} aria-hidden />} loading={resendInvite.isPending && resendInvite.variables === inv.id} onClick={() => onResend(inv.id, inv.email, inv.role)}>Resend</Button>
                   <Button variant="ghost" icon={<Trash2 size={20} aria-hidden />} aria-label={`Revoke invite for ${inv.email}`} onClick={() => revokeInvite.mutate(inv.id, { onError: (err) => setPageError(messageFrom(err)) })} />
                 </span>
               </div>
@@ -111,6 +169,7 @@ export function MembersPage() {
           <h2 className="section-title">Invite someone</h2>
           <form className="auth__form" onSubmit={onInvite} noValidate>
             {errors.formError && <Alert tone="error" title={errors.formError} />}
+            <TextField label="Name (optional)" hint="Used to personalize the WhatsApp share message." autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} />
             <TextField label="Email" type="email" autoComplete="email" inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)} error={errors.fieldErrors.email} />
             <div className="field">
               <label className="field__label" htmlFor="invite-role">Role</label>

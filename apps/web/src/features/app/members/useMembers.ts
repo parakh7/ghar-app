@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { HouseholdDTO, InviteDTO, InviteMemberInput, MemberDTO, UpdateMemberInput } from "@household/shared";
+import type { HouseholdDTO, InviteDTO, InviteMemberInput, InviteWithLinkDTO, MemberDTO, UpdateMemberInput } from "@household/shared";
 import { del, get, patch, post } from "../../../lib/api";
 import { meKey } from "../../auth/session";
 
@@ -30,7 +30,7 @@ export function useInvites(householdId: string | undefined) {
 export function useInviteMember(householdId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: InviteMemberInput) => post<InviteDTO>(`/households/${householdId}/invites`, body),
+    mutationFn: (body: InviteMemberInput) => post<InviteWithLinkDTO>(`/households/${householdId}/invites`, body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["invites", householdId] }),
   });
 }
@@ -46,7 +46,7 @@ export function useRevokeInvite(householdId: string) {
 export function useResendInvite(householdId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (inviteId: string) => post<InviteDTO>(`/households/${householdId}/invites/${inviteId}/resend`),
+    mutationFn: (inviteId: string) => post<InviteWithLinkDTO>(`/households/${householdId}/invites/${inviteId}/resend`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["invites", householdId] }),
   });
 }

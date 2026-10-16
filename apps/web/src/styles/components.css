@@ -36,6 +36,10 @@
 .input:hover { border-color: var(--ink-3); }
 .input:focus { outline: none; border-color: var(--accent-700); box-shadow: 0 0 0 3px var(--accent-100); }
 .input[aria-invalid="true"] { border-color: var(--overdue); }
+/* iOS Safari centers the date/time value and gives the control its own chrome, breaking the
+   left-aligned look every other input in this app has — reset appearance and force alignment. */
+.input[type="date"], .input[type="time"] { -webkit-appearance: none; appearance: none; }
+.input[type="date"]::-webkit-date-and-time-value, .input[type="time"]::-webkit-date-and-time-value { text-align: left; }
 .input--with-action { padding-right: 56px; }
 .field__action {
   position: absolute; right: 2px; top: 2px; bottom: 2px; width: 48px;

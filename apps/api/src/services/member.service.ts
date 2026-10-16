@@ -1,5 +1,5 @@
 import { and, asc, eq, gt, isNull } from "drizzle-orm";
-import type { HouseholdDTO, HouseholdRole, InviteDTO, InviteMemberInput, MemberDTO, UpdateMemberInput } from "@household/shared";
+import type { HouseholdDTO, HouseholdRole, InviteDTO, InviteMemberInput, InviteWithLinkDTO, MemberDTO, UpdateMemberInput } from "@household/shared";
 import { householdInvites, householdMembers, users } from "../db/schema.js";
 import type { DbOrTx } from "../db/client.js";
 import { generateToken, hashToken } from "../lib/crypto.js";
@@ -118,7 +118,7 @@ export async function listInvites(deps: Deps, householdId: string): Promise<Invi
   return rows.map(toInviteDTO);
 }
 
-export async function createInvite(deps: Deps, actorUserId: string, membership: Membership, input: InviteMemberInput, ip?: string): Promise<InviteDTO> {
+export async function createInvite(deps: Deps, actorUserId: string, membership: Membership, input: InviteMemberInput, ip?: string): Promise<InviteWithLinkDTO> {
   const [existingMember] = await deps.db.select({ id: users.id }).from(users)
     .innerJoin(householdMembers, and(eq(householdMembers.userId, users.id), eq(householdMembers.householdId, membership.householdId), eq(householdMembers.status, "ACTIVE")))
     .where(eq(users.email, input.email)).limit(1);
@@ -141,7 +141,7 @@ export async function createInvite(deps: Deps, actorUserId: string, membership: 
   deps.email.send(inviteMessage(invite.email, invite.role, membership.name, link))
     .catch((err: unknown) => deps.logger.error({ err, householdId: membership.householdId }, "invite email failed"));
   deps.logger.info({ householdId: membership.householdId, event: "member.invited" }, "member invited");
-  return toInviteDTO(invite);
+  return { ...toInviteDTO(invite), link };
 }
 
 export async function revokeInvite(deps: Deps, actorUserId: string, householdId: string, inviteId: string, ip?: string): Promise<void> {
@@ -154,7 +154,7 @@ export async function revokeInvite(deps: Deps, actorUserId: string, householdId:
   });
 }
 
-export async function resendInvite(deps: Deps, actorUserId: string, membership: Membership, inviteId: string, ip?: string): Promise<InviteDTO> {
+export async function resendInvite(deps: Deps, actorUserId: string, membership: Membership, inviteId: string, ip?: string): Promise<InviteWithLinkDTO> {
   const token = generateToken();
   const now = deps.clock.now();
   const invite = await deps.db.transaction(async (tx) => {
@@ -169,7 +169,7 @@ export async function resendInvite(deps: Deps, actorUserId: string, membership: 
   const link = `${deps.env.APP_URL}/invites/accept?token=${encodeURIComponent(token)}`;
   deps.email.send(inviteMessage(invite.email, invite.role, membership.name, link))
     .catch((err: unknown) => deps.logger.error({ err, householdId: membership.householdId }, "invite email failed"));
-  return toInviteDTO(invite);
+  return { ...toInviteDTO(invite), link };
 }
 
 /** `user` is whoever is currently authenticated — the caller doesn't need to be a member of the invite's household yet. */
