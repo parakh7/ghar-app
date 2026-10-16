@@ -24,8 +24,11 @@ const email = env.EMAIL_PROVIDER === "resend" ? new ResendEmailProvider(new Rese
 // deps.queue is a true no-op there rather than an unused BullMQ/Redis connection.
 const queue: Queue = env.JOB_RUNNER === "http" ? new FakeQueue() : new BullMQQueue(env, logger, { consume: false });
 const errorReporter = new ConsoleErrorReporter(logger);
-const redis = new Redis(env.REDIS_URL);
-redis.on("error", (err) => logger.error({ err }, "rate-limit redis error"));
+// JOB_RUNNER=http means no Redis is expected to be available at all (that's the point of that
+// mode) — rate limiting falls back to express-rate-limit's in-memory store in that case, same as
+// the test environment already does, rather than retrying a connection that will never succeed.
+const redis = env.JOB_RUNNER === "http" ? undefined : new Redis(env.REDIS_URL);
+redis?.on("error", (err) => logger.error({ err }, "rate-limit redis error"));
 
 const app = createApp({ env, db, logger, clock: systemClock, email, queue, errorReporter, redis });
 const server = app.listen(env.PORT, () => logger.info({ port: env.PORT, env: env.NODE_ENV }, "API listening"));
@@ -39,7 +42,7 @@ async function shutdown(signal: string) {
   logger.info({ signal }, "shutting down");
   server.close(async () => {
     await queue.close();
-    await redis.quit();
+    await redis?.quit();
     await pool.end();
     process.exit(0);
   });
