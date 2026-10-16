@@ -1,1 +1,7 @@
+# Proxies the API through Netlify's own domain so the browser sees everything as one origin —
+# avoids iOS Safari's Intelligent Tracking Prevention blocking the session cookie as "third-party"
+# when the API is called cross-site via fetch (see the "same-origin deployment" fix for details).
+# Must come before the SPA catch-all below.
+/api/*    https://ghar-api.onrender.com/api/:splat    200
+
 /*    /index.html   200
