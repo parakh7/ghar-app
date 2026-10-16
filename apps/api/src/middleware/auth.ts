@@ -10,7 +10,13 @@ export function sessionCookieName(env: Pick<Env, "NODE_ENV">): string {
 }
 
 function cookieOptions(env: Env, expires?: Date): CookieOptions {
-  return { httpOnly: true, secure: env.NODE_ENV === "production", sameSite: "lax", path: "/", ...(expires ? { expires } : {}) };
+  // "lax" works for local dev (same registrable domain, different ports count as same-site) but
+  // breaks the common deployment shape of a separately-hosted SPA + API (e.g. Netlify + Render) —
+  // those are genuinely cross-site, and Lax cookies are never sent on cross-site fetch/XHR
+  // regardless of `credentials: "include"`. "none" requires Secure (already true in production)
+  // and is safe here specifically because csrfProtection's custom-header check already defends
+  // against the CSRF risk SameSite normally mitigates.
+  return { httpOnly: true, secure: env.NODE_ENV === "production", sameSite: env.NODE_ENV === "production" ? "none" : "lax", path: "/", ...(expires ? { expires } : {}) };
 }
 
 export function setSessionCookie(res: Response, env: Env, token: string, expiresAt: Date): void {

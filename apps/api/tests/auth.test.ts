@@ -25,6 +25,18 @@ describe("signup", () => {
     expect(me.body.data.user.email).toBe("parakh@example.com");
   });
 
+  it("uses SameSite=None and the __Host- cookie prefix in production, so a separately-hosted SPA (e.g. Netlify + Render) can authenticate cross-site", async () => {
+    const prodCtx = createTestContext({ NODE_ENV: "production", EMAIL_FROM: "Ghar <no-reply@test.example.com>" });
+    await truncateAll(prodCtx.db);
+    const res = await prodCtx.request.post("/api/auth/signup").set(csrf).send({ name: "Parakh", email: "prod@example.com", password: "correct horse battery" });
+    expect(res.status).toBe(201);
+    const setCookie = (res.headers["set-cookie"] as unknown as string[])[0]!;
+    expect(setCookie).toMatch(/^__Host-hh_session=/);
+    expect(setCookie).toMatch(/SameSite=None/i);
+    expect(setCookie).toMatch(/Secure/i);
+    await prodCtx.close();
+  });
+
   it("stores only a hash of the session token", async () => {
     const u = await signupUser(ctx);
     const raw = u.cookie.split("=")[1]!;
