@@ -159,8 +159,12 @@ All variables are validated at startup (`apps/api/src/config/env.ts`); the API r
 | `REDIS_URL` | `redis://localhost:6379` | BullMQ job queue, used when `JOB_RUNNER=bullmq` |
 | `JOB_RUNNER` | `bullmq` | `bullmq` (dedicated worker process) or `http` (external cron hits `/api/internal/run-jobs` instead — no worker/Redis needed for jobs) |
 | `JOBS_SECRET` | — | Required when `JOB_RUNNER=http`; sent as the `x-jobs-secret` header |
-| `VAPID_*` | — | Reserved for Phase 7 (web push, deferred) |
+| `PUSH_PROVIDER` | `console` | `console` (logs payloads, no real push), `memory` (tests), or `web-push` (real browser push via VAPID) |
+| `VAPID_PUBLIC_KEY` | — | Required when `PUSH_PROVIDER=web-push`; generate with `npx web-push generate-vapid-keys` |
+| `VAPID_PRIVATE_KEY` | — | Required when `PUSH_PROVIDER=web-push`; keep secret |
+| `VAPID_EMAIL` | `mailto:admin@example.com` | Contact subject sent with every push (`mailto:` or `http(s)://`) |
 | `VITE_API_URL` (web) | same origin | Only if the API is on a different origin |
+| `VITE_VAPID_PUBLIC_KEY` (web) | — | Same value as `VAPID_PUBLIC_KEY`; needed by the frontend to call `pushManager.subscribe` — not sensitive |
 
 `.env` is git-ignored. Never commit secrets.
 
@@ -275,7 +279,9 @@ Primitives so far: `Button`, `TextField` (with password reveal), `Alert`, `Empty
 
 ## PWA & push notifications
 
-Planned for Phase 7 (web push) and Phase 9 (manifest, service worker, offline cache and queued mutations). The groundwork is in place: `push_subscriptions` and `notification_deliveries` tables, the `IN_APP`/`WEB_PUSH`/`EMAIL`/`SMS`/`WHATSAPP` channel enum, `client_mutation_id` columns, and theme-colour and viewport-fit meta tags. To generate VAPID keys when the time comes: `npx web-push generate-vapid-keys`.
+Shipped in Phase 7 (web push) and Phase 9 (manifest, service worker, offline cache and queued mutations).
+
+Web push is self-hosted via VAPID — no third-party push service. From **Settings → Notifications**, a user can enable browser notifications on a device (subscribes via the service worker and POSTs the subscription to `/api/push-subscriptions`), opt in or out per category (bills, salary), and send themselves a test notification. A background job (`apps/api/src/jobs/dispatch-web-push-deliveries.job.ts`) runs every 5 minutes, dispatching any due bill/salary reminder as a push to every active subscription for that user; a subscription the push service reports as gone (404/410) is revoked automatically. Unsubscribing on a device removes that device's subscription. Generate VAPID keys once per environment with `npx web-push generate-vapid-keys` and set `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`/`VAPID_EMAIL`/`PUSH_PROVIDER=web-push` (API) and `VITE_VAPID_PUBLIC_KEY` (web) — see [Environment variables](#environment-variables).
 
 ## Deployment
 
