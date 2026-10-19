@@ -48,4 +48,24 @@ describe("loadEnv", () => {
     expect(env.JOB_RUNNER).toBe("http");
     expect(env.JOBS_SECRET).toBe("s3cret");
   });
+
+  it("defaults PUSH_PROVIDER to console, no VAPID keys required", () => {
+    const env = loadEnv({ DATABASE_URL: "postgresql://x/y" });
+    expect(env.PUSH_PROVIDER).toBe("console");
+    expect(env.VAPID_PUBLIC_KEY).toBeUndefined();
+  });
+
+  it("requires VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY when PUSH_PROVIDER=web-push", () => {
+    expect(() => loadEnv({ DATABASE_URL: "postgresql://x/y", PUSH_PROVIDER: "web-push" })).toThrow(/VAPID_PUBLIC_KEY/);
+  });
+
+  it("accepts PUSH_PROVIDER=web-push when both VAPID keys are set", () => {
+    const env = loadEnv({ DATABASE_URL: "postgresql://x/y", PUSH_PROVIDER: "web-push", VAPID_PUBLIC_KEY: "pub", VAPID_PRIVATE_KEY: "priv" });
+    expect(env.PUSH_PROVIDER).toBe("web-push");
+  });
+
+  it("rejects a VAPID_EMAIL that isn't a mailto: or https: URI when PUSH_PROVIDER=web-push", () => {
+    expect(() => loadEnv({ DATABASE_URL: "postgresql://x/y", PUSH_PROVIDER: "web-push", VAPID_PUBLIC_KEY: "pub", VAPID_PRIVATE_KEY: "priv", VAPID_EMAIL: "admin@example.com" }))
+      .toThrow(/VAPID_EMAIL/);
+  });
 });
