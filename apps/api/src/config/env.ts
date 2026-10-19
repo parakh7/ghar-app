@@ -37,7 +37,7 @@ const envSchema = z.object({
   if (env.PUSH_PROVIDER === "web-push") {
     if (!env.VAPID_PUBLIC_KEY) ctx.addIssue({ code: "custom", path: ["VAPID_PUBLIC_KEY"], message: "VAPID_PUBLIC_KEY is required when PUSH_PROVIDER=web-push." });
     if (!env.VAPID_PRIVATE_KEY) ctx.addIssue({ code: "custom", path: ["VAPID_PRIVATE_KEY"], message: "VAPID_PRIVATE_KEY is required when PUSH_PROVIDER=web-push." });
-    if (!/^(mailto:|https?:)/.test(env.VAPID_EMAIL)) ctx.addIssue({ code: "custom", path: ["VAPID_EMAIL"], message: "VAPID_EMAIL must start with mailto: or https:// (the web-push spec requires a contactable VAPID subject)." });
+    if (!/^(mailto:|https?:)/.test(env.VAPID_EMAIL)) ctx.addIssue({ code: "custom", path: ["VAPID_EMAIL"], message: "VAPID_EMAIL must start with mailto: or http(s):// (the web-push spec requires a contactable VAPID subject)." });
   }
   if (env.JOB_RUNNER === "http" && !env.JOBS_SECRET) {
     ctx.addIssue({ code: "custom", path: ["JOBS_SECRET"], message: "JOBS_SECRET is required when JOB_RUNNER=http." });
