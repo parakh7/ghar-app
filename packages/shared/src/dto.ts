@@ -131,7 +131,7 @@ export type NotificationDTO = {
 export type SettableNotificationCategory = "BILL" | "SALARY";
 
 export type NotificationPreferenceDTO = {
-  category: SettableNotificationCategory; enabled: boolean; emailEnabled: boolean;
+  category: SettableNotificationCategory; enabled: boolean; emailEnabled: boolean; pushEnabled: boolean;
 };
 
 export type TodayAttendanceSummaryDTO = { marked: number; total: number };
