@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { Link, NavLink, Outlet } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Bell, ChartNoAxesColumn, ChevronDown, ClipboardCheck, Home, MoreHorizontal,
   PanelLeft, PanelLeftClose, ReceiptIndianRupee, Search, Settings, UserRound, Users, Wallet,
@@ -67,6 +68,23 @@ export function AppShell() {
   const unreadCount = useUnreadCount(household?.id).data ?? 0;
   const [collapsed, setCollapsed] = useState(false);
   const name = data?.user.name ?? "";
+
+  const navigate = useNavigate();
+  const qc = useQueryClient();
+
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+    function onMessage(event: MessageEvent) {
+      if (!event.data || event.data.type !== "notification-click") return;
+      if (household) {
+        void qc.invalidateQueries({ queryKey: ["notifications", household.id] });
+        void qc.invalidateQueries({ queryKey: ["notifications-unread-count", household.id] });
+      }
+      navigate(event.data.linkPath as string);
+    }
+    navigator.serviceWorker.addEventListener("message", onMessage);
+    return () => navigator.serviceWorker.removeEventListener("message", onMessage);
+  }, [navigate, qc, household]);
 
   return (
     <div className={`shell${collapsed ? " shell--collapsed" : ""}`}>

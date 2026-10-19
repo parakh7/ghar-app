@@ -29,6 +29,7 @@ function renderShell(unreadCount: number, households: HouseholdSummaryDTO[] = [H
           <Route element={<AppShell />}><Route index element={<div>Home page body</div>} /></Route>
           <Route path="/search" element={<div>Search results page</div>} />
           <Route path="/more" element={<div>More page</div>} />
+          <Route path="/bills/:id" element={<div>Bill detail page</div>} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -101,5 +102,17 @@ describe("AppShell", () => {
     expect(profileLinks[0]).toHaveTextContent("PS");
     await userEvent.click(profileLinks[0]!);
     await screen.findByText("More page");
+  });
+
+  it("navigates and refreshes notifications when the service worker reports a notification click", async () => {
+    const swTarget = new EventTarget();
+    Object.defineProperty(navigator, "serviceWorker", { value: swTarget, configurable: true });
+    renderShell(0);
+    await screen.findByText("Home page body");
+
+    swTarget.dispatchEvent(new MessageEvent("message", { data: { type: "notification-click", linkPath: "/bills/abc123" } }));
+
+    await screen.findByText("Bill detail page");
+    Reflect.deleteProperty(navigator, "serviceWorker");
   });
 });
