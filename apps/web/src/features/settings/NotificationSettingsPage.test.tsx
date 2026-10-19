@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -142,5 +142,29 @@ describe("NotificationSettingsPage", () => {
     await userEvent.click(testButton);
     await screen.findByText("Sent — check for a notification.");
     expect(fetchSpy.mock.calls.some(([u, init]) => String(u).endsWith("/households/h1/notifications/test-push") && (init as RequestInit | undefined)?.method === "POST")).toBe(true);
+  });
+
+  it("re-POSTs an existing browser subscription to the server automatically on render, without the user clicking anything", async () => {
+    stubPushSupport({ permission: "granted", subscription: { endpoint: "https://push.example/abc", keys: { p256dh: "p", auth: "a" }, toJSON() { return { endpoint: "https://push.example/abc", keys: { p256dh: "p", auth: "a" } }; } } });
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation((async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/push-subscriptions") && init?.method === "POST") {
+        return jsonResponse({ success: true, data: null, message: null });
+      }
+      if (url.endsWith("/households/h1/notification-preferences")) {
+        return jsonResponse({ success: true, data: [
+          { category: "BILL", enabled: true, emailEnabled: false, pushEnabled: false },
+          { category: "SALARY", enabled: true, emailEnabled: false, pushEnabled: false },
+        ] }, 200);
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    }) as typeof fetch);
+    renderPage();
+    await screen.findByRole("button", { name: "Send test notification" });
+    await waitFor(() => {
+      expect(fetchSpy.mock.calls.some(([u, init]) => String(u).endsWith("/push-subscriptions") && (init as RequestInit | undefined)?.method === "POST")).toBe(true);
+    });
+    const [, init] = fetchSpy.mock.calls.find(([u, i]) => String(u).endsWith("/push-subscriptions") && (i as RequestInit | undefined)?.method === "POST")!;
+    expect(JSON.parse((init as RequestInit).body as string)).toMatchObject({ endpoint: "https://push.example/abc", keys: { p256dh: "p", auth: "a" } });
   });
 });

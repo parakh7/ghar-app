@@ -2,11 +2,12 @@ import type { NotificationPreferenceDTO, SettableNotificationCategory } from "@h
 import { PushPermissionDeniedError } from "../../lib/push";
 import { useActiveHousehold } from "../app/useActiveHousehold";
 import { useNotificationPreferences, useUpdateNotificationPreference } from "./useNotificationPreferences";
-import { usePushSupportState, useSendTestPushNotification, useSubscribeToPush, useUnsubscribeFromPush } from "./usePushSubscription";
+import { usePushSupportState, useSendTestPushNotification, useSubscribeToPush, useSyncPushSubscription, useUnsubscribeFromPush } from "./usePushSubscription";
 
 const CATEGORY_LABEL: Record<SettableNotificationCategory, string> = { BILL: "Bills", SALARY: "Salary" };
 
 function PushSubscriptionSection({ householdId }: { householdId: string }) {
+  useSyncPushSubscription();
   const supportQuery = usePushSupportState();
   const subscribeMutation = useSubscribeToPush();
   const unsubscribeMutation = useUnsubscribeFromPush();

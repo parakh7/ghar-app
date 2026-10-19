@@ -34,6 +34,13 @@ export async function subscribeToPush(vapidPublicKey: string): Promise<PushSubsc
   return subscription.toJSON();
 }
 
+export async function getExistingSubscriptionJSON(): Promise<PushSubscriptionJSON | null> {
+  if (!isPushSupported()) return null;
+  const registration = await navigator.serviceWorker.ready;
+  const existing = await registration.pushManager.getSubscription();
+  return existing ? existing.toJSON() : null;
+}
+
 export async function unsubscribeFromPush(): Promise<string | null> {
   if (!isPushSupported()) return null;
   const registration = await navigator.serviceWorker.ready;
