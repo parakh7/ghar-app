@@ -16,7 +16,7 @@ describe("POST /api/internal/run-jobs", () => {
     await ctx.close();
   });
 
-  it("runs all three jobs and reports them when the secret matches", async () => {
+  it("runs all four jobs and reports them when the secret matches", async () => {
     const ctx = createTestContext({ JOB_RUNNER: "http", JOBS_SECRET: "correct-secret" });
     await truncateAll(ctx.db);
 
@@ -27,6 +27,7 @@ describe("POST /api/internal/run-jobs", () => {
       { name: "heartbeat", ok: true },
       { name: "evaluate-reminders", ok: true },
       { name: "dispatch-email-deliveries", ok: true },
+      { name: "dispatch-web-push-deliveries", ok: true },
     ]);
 
     await ctx.close();

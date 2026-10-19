@@ -4,6 +4,7 @@ import { Errors } from "../lib/errors.js";
 import { runHeartbeat } from "../jobs/heartbeat.job.js";
 import { runEvaluateReminders } from "../jobs/evaluate-reminders.job.js";
 import { runDispatchEmailDeliveries } from "../jobs/dispatch-email-deliveries.job.js";
+import { runDispatchWebPushDeliveries } from "../jobs/dispatch-web-push-deliveries.job.js";
 import type { Deps } from "../services/deps.js";
 
 export type NamedJob = { name: string; run: (deps: Deps) => Promise<void> };
@@ -13,6 +14,7 @@ const JOBS: NamedJob[] = [
   { name: "heartbeat", run: runHeartbeat },
   { name: "evaluate-reminders", run: runEvaluateReminders },
   { name: "dispatch-email-deliveries", run: runDispatchEmailDeliveries },
+  { name: "dispatch-web-push-deliveries", run: runDispatchWebPushDeliveries },
 ];
 
 /** Runs each job in order; one throwing doesn't stop the others, matching how independent BullMQ job failures don't affect each other. */

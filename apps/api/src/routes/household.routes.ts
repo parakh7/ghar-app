@@ -22,6 +22,7 @@ import * as househelps from "../services/househelp.service.js";
 import * as members from "../services/member.service.js";
 import * as notificationPreferencesService from "../services/notification-preference.service.js";
 import * as notificationsService from "../services/notification.service.js";
+import * as pushTestService from "../services/push/push-test.service.js";
 import * as reminderRules from "../services/reminder-rule.service.js";
 import * as schedules from "../services/schedule.service.js";
 import * as salaryAdjustments from "../services/salary-adjustment.service.js";
@@ -484,6 +485,10 @@ export function householdRoutes(deps: Deps): Router {
   r.patch("/:householdId/notification-preferences/:category", requireHousehold(deps, "household.view"), async (req, res) => {
     const input = parseBody(req, updateNotificationPreferenceSchema);
     ok(res, await notificationPreferencesService.updateNotificationPreference(deps, req.auth!.user.id, req.membership!, req.params.category as string, input));
+  });
+
+  r.post("/:householdId/notifications/test-push", requireHousehold(deps, "household.view"), async (req, res) => {
+    ok(res, await pushTestService.sendTestPushNotification(deps, req.auth!.user.id, req.membership!));
   });
 
   r.get("/:householdId/today", requireHousehold(deps, "household.view"), async (req, res) => {
