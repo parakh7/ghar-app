@@ -29,8 +29,8 @@ describe("notification preferences", () => {
       const res = await ctx.request.get(`/api/households/${h.id}/notification-preferences`).set("cookie", other.cookie);
       expect(res.status).toBe(200);
       expect(res.body.data).toEqual([
-        { category: "BILL", enabled: true, emailEnabled: false },
-        { category: "SALARY", enabled: true, emailEnabled: false },
+        { category: "BILL", enabled: true, emailEnabled: false, pushEnabled: true },
+        { category: "SALARY", enabled: true, emailEnabled: false, pushEnabled: true },
       ]);
     });
 
@@ -43,7 +43,7 @@ describe("notification preferences", () => {
 
       const res = await ctx.request.get(`/api/households/${h.id}/notification-preferences`).set("cookie", owner.cookie);
       const bill = res.body.data.find((p: { category: string }) => p.category === "BILL");
-      expect(bill).toEqual({ category: "BILL", enabled: false, emailEnabled: true });
+      expect(bill).toEqual({ category: "BILL", enabled: false, emailEnabled: true, pushEnabled: true });
     });
 
     it("never returns another member's preferences", async () => {
@@ -57,7 +57,7 @@ describe("notification preferences", () => {
 
       const res = await ctx.request.get(`/api/households/${h.id}/notification-preferences`).set("cookie", other.cookie);
       const salary = res.body.data.find((p: { category: string }) => p.category === "SALARY");
-      expect(salary).toEqual({ category: "SALARY", enabled: true, emailEnabled: false }); // default, not owner's disabled row
+      expect(salary).toEqual({ category: "SALARY", enabled: true, emailEnabled: false, pushEnabled: true }); // default, not owner's disabled row
     });
 
     it("404s for a non-member", async () => {
@@ -78,7 +78,7 @@ describe("notification preferences", () => {
 
       const res = await ctx.request.patch(`/api/households/${h.id}/notification-preferences/BILL`).set(csrf).set("cookie", other.cookie).send({ emailEnabled: true });
       expect(res.status).toBe(200);
-      expect(res.body.data).toEqual({ category: "BILL", enabled: true, emailEnabled: true });
+      expect(res.body.data).toEqual({ category: "BILL", enabled: true, emailEnabled: true, pushEnabled: true });
 
       const [row] = await ctx.db.select().from(notificationPreferences)
         .where(and(eq(notificationPreferences.householdId, h.id), eq(notificationPreferences.userId, other.id), eq(notificationPreferences.category, "BILL")));
@@ -92,10 +92,10 @@ describe("notification preferences", () => {
       const h = await createHousehold(ctx, owner.cookie);
 
       const first = await ctx.request.patch(`/api/households/${h.id}/notification-preferences/SALARY`).set(csrf).set("cookie", owner.cookie).send({ emailEnabled: true });
-      expect(first.body.data).toEqual({ category: "SALARY", enabled: true, emailEnabled: true });
+      expect(first.body.data).toEqual({ category: "SALARY", enabled: true, emailEnabled: true, pushEnabled: true });
 
       const second = await ctx.request.patch(`/api/households/${h.id}/notification-preferences/SALARY`).set(csrf).set("cookie", owner.cookie).send({ enabled: false });
-      expect(second.body.data).toEqual({ category: "SALARY", enabled: false, emailEnabled: true }); // emailEnabled untouched
+      expect(second.body.data).toEqual({ category: "SALARY", enabled: false, emailEnabled: true, pushEnabled: true }); // emailEnabled untouched
     });
 
     it("round-trips emailEnabled true then false without disturbing IN_APP/WEB_PUSH", async () => {
@@ -104,7 +104,7 @@ describe("notification preferences", () => {
 
       await ctx.request.patch(`/api/households/${h.id}/notification-preferences/BILL`).set(csrf).set("cookie", owner.cookie).send({ emailEnabled: true });
       const off = await ctx.request.patch(`/api/households/${h.id}/notification-preferences/BILL`).set(csrf).set("cookie", owner.cookie).send({ emailEnabled: false });
-      expect(off.body.data).toEqual({ category: "BILL", enabled: true, emailEnabled: false });
+      expect(off.body.data).toEqual({ category: "BILL", enabled: true, emailEnabled: false, pushEnabled: true });
 
       const [row] = await ctx.db.select().from(notificationPreferences)
         .where(and(eq(notificationPreferences.householdId, h.id), eq(notificationPreferences.userId, owner.id), eq(notificationPreferences.category, "BILL")));
@@ -130,6 +130,30 @@ describe("notification preferences", () => {
       const [ownerRow] = await ctx.db.select().from(notificationPreferences)
         .where(and(eq(notificationPreferences.householdId, h.id), eq(notificationPreferences.userId, owner.id), eq(notificationPreferences.category, "BILL")));
       expect(ownerRow!.enabled).toBe(true); // untouched — only `other`'s row was created/changed
+    });
+
+    it("round-trips pushEnabled true then false without disturbing IN_APP/EMAIL", async () => {
+      const owner = await signupUser(ctx);
+      const h = await createHousehold(ctx, owner.cookie);
+
+      await ctx.request.patch(`/api/households/${h.id}/notification-preferences/BILL`).set(csrf).set("cookie", owner.cookie).send({ pushEnabled: false });
+      const row1 = await ctx.db.select().from(notificationPreferences)
+        .where(and(eq(notificationPreferences.householdId, h.id), eq(notificationPreferences.userId, owner.id), eq(notificationPreferences.category, "BILL")));
+      expect(row1[0]!.channels).toEqual(expect.arrayContaining(["IN_APP"]));
+      expect(row1[0]!.channels).not.toContain("WEB_PUSH");
+
+      const on = await ctx.request.patch(`/api/households/${h.id}/notification-preferences/BILL`).set(csrf).set("cookie", owner.cookie).send({ pushEnabled: true });
+      expect(on.body.data).toEqual({ category: "BILL", enabled: true, emailEnabled: false, pushEnabled: true });
+    });
+
+    it("a single PATCH can set both emailEnabled and pushEnabled", async () => {
+      const owner = await signupUser(ctx);
+      const h = await createHousehold(ctx, owner.cookie);
+
+      const res = await ctx.request.patch(`/api/households/${h.id}/notification-preferences/SALARY`).set(csrf).set("cookie", owner.cookie)
+        .send({ emailEnabled: true, pushEnabled: false });
+
+      expect(res.body.data).toEqual({ category: "SALARY", enabled: true, emailEnabled: true, pushEnabled: false });
     });
   });
 });

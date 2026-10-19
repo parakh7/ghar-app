@@ -14,7 +14,7 @@ const SETTABLE_CATEGORIES: SettableNotificationCategory[] = ["BILL", "SALARY"];
 function toDTO(category: SettableNotificationCategory, row: PrefRow | undefined): NotificationPreferenceDTO {
   const enabled = row?.enabled ?? true;
   const channels = row?.channels ?? DEFAULT_CHANNELS;
-  return { category, enabled, emailEnabled: channels.includes("EMAIL") };
+  return { category, enabled, emailEnabled: channels.includes("EMAIL"), pushEnabled: channels.includes("WEB_PUSH") };
 }
 
 export async function listNotificationPreferences(deps: Deps, userId: string, membership: Membership): Promise<NotificationPreferenceDTO[]> {
@@ -37,11 +37,16 @@ export async function updateNotificationPreference(
 
     const enabled = input.enabled ?? existing?.enabled ?? true;
     const currentChannels = existing?.channels ?? DEFAULT_CHANNELS;
-    const channels: ChannelValue[] = input.emailEnabled === undefined
+    const afterEmail: ChannelValue[] = input.emailEnabled === undefined
       ? currentChannels
       : input.emailEnabled
         ? currentChannels.includes("EMAIL") ? currentChannels : [...currentChannels, "EMAIL"]
         : currentChannels.filter((c) => c !== "EMAIL");
+    const channels: ChannelValue[] = input.pushEnabled === undefined
+      ? afterEmail
+      : input.pushEnabled
+        ? afterEmail.includes("WEB_PUSH") ? afterEmail : [...afterEmail, "WEB_PUSH"]
+        : afterEmail.filter((c) => c !== "WEB_PUSH");
 
     if (existing) {
       await tx.update(notificationPreferences).set({ enabled, channels }).where(eq(notificationPreferences.id, existing.id));
@@ -51,5 +56,5 @@ export async function updateNotificationPreference(
     return { enabled, channels };
   });
 
-  return { category: cat, enabled: result.enabled, emailEnabled: result.channels.includes("EMAIL") };
+  return { category: cat, enabled: result.enabled, emailEnabled: result.channels.includes("EMAIL"), pushEnabled: result.channels.includes("WEB_PUSH") };
 }
