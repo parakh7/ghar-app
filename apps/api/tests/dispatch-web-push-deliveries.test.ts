@@ -169,6 +169,24 @@ describe("runDispatchWebPushDeliveries", () => {
     expect(emailRow!.status).toBe("PENDING");
   });
 
+  it("gives two notifications dispatched in the same run different tags, so neither replaces the other's OS notification", async () => {
+    const owner = await signupUser(ctx);
+    const h = await createHousehold(ctx, owner.cookie);
+    await addSubscription(owner.id, "https://push.example/a");
+    await insertDelivery(h.id, owner.id);
+    await insertDelivery(h.id, owner.id);
+
+    await runDispatchWebPushDeliveries(ctx.deps);
+
+    expect(ctx.push.sent).toHaveLength(2);
+    const tags = ctx.push.sent.map((s) => s.payload.tag);
+    for (const tag of tags) {
+      expect(tag).toBeTruthy();
+      expect(tag.startsWith("reminder-")).toBe(true);
+    }
+    expect(tags[0]).not.toBe(tags[1]);
+  });
+
   it("caps how many rows it processes in a single run", async () => {
     const owner = await signupUser(ctx);
     const h = await createHousehold(ctx, owner.cookie);
