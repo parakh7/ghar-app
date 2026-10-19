@@ -9,6 +9,8 @@ import { createLogger } from "./lib/logger.js";
 import { BullMQQueue, FakeQueue, type Queue } from "./lib/queue.js";
 import { ConsoleEmailProvider, MemoryEmailProvider } from "./services/email/email.provider.js";
 import { ResendEmailProvider } from "./services/email/resend.provider.js";
+import { ConsolePushProvider, MemoryPushProvider } from "./services/push/push.provider.js";
+import { WebPushProvider } from "./services/push/web-push.provider.js";
 
 const env = loadEnv();
 const logger = createLogger(env);
@@ -17,6 +19,9 @@ const db = createDb(pool);
 const email = env.EMAIL_PROVIDER === "resend" ? new ResendEmailProvider(new Resend(env.RESEND_API_KEY), env.EMAIL_FROM, logger)
   : env.EMAIL_PROVIDER === "memory" ? new MemoryEmailProvider()
   : new ConsoleEmailProvider(logger);
+const push = env.PUSH_PROVIDER === "web-push" ? new WebPushProvider(env.VAPID_PUBLIC_KEY!, env.VAPID_PRIVATE_KEY!, env.VAPID_EMAIL, logger)
+  : env.PUSH_PROVIDER === "memory" ? new MemoryPushProvider()
+  : new ConsolePushProvider(logger);
 // `{ consume: false }` (the default): the API server only schedules/produces jobs via
 // `deps.queue` — it never registers a handler and never processes jobs itself. Job processing
 // belongs exclusively to the dedicated worker process (see `worker.ts`). In JOB_RUNNER=http mode
@@ -30,7 +35,7 @@ const errorReporter = new ConsoleErrorReporter(logger);
 const redis = env.JOB_RUNNER === "http" ? undefined : new Redis(env.REDIS_URL);
 redis?.on("error", (err) => logger.error({ err }, "rate-limit redis error"));
 
-const app = createApp({ env, db, logger, clock: systemClock, email, queue, errorReporter, redis });
+const app = createApp({ env, db, logger, clock: systemClock, email, push, queue, errorReporter, redis });
 const server = app.listen(env.PORT, () => logger.info({ port: env.PORT, env: env.NODE_ENV }, "API listening"));
 
 process.on("unhandledRejection", (reason) => logger.error({ err: reason }, "unhandled promise rejection"));

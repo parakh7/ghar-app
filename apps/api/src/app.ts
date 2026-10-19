@@ -13,6 +13,7 @@ import { healthRoutes } from "./routes/health.routes.js";
 import { householdRoutes } from "./routes/household.routes.js";
 import { internalRoutes } from "./routes/internal.routes.js";
 import { inviteRoutes } from "./routes/invite.routes.js";
+import { pushSubscriptionRoutes } from "./routes/push-subscription.routes.js";
 import type { Deps } from "./services/deps.js";
 
 export function createApp(deps: Deps): Express {
@@ -50,6 +51,7 @@ export function createApp(deps: Deps): Express {
   app.use("/api/auth", authRoutes(deps));
   app.use("/api/households", householdRoutes(deps));
   app.use("/api/invites", inviteRoutes(deps));
+  app.use("/api/push-subscriptions", pushSubscriptionRoutes(deps));
 
   app.use(notFoundHandler);
   app.use(errorHandler(deps.logger, deps.errorReporter));

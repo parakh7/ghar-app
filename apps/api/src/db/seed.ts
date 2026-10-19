@@ -12,6 +12,7 @@ import { createLogger } from "../lib/logger.js";
 import { hashPassword } from "../lib/password.js";
 import { FakeQueue } from "../lib/queue.js";
 import { ConsoleEmailProvider } from "../services/email/email.provider.js";
+import { ConsolePushProvider } from "../services/push/push.provider.js";
 import { createHousehold } from "../services/household.service.js";
 import { createDb, createPool } from "./client.js";
 import { householdMembers, notificationPreferences, users } from "./schema.js";
@@ -26,7 +27,7 @@ async function main() {
   const db = createDb(pool);
   // Seeding never touches the job queue or error-handling middleware, so a FakeQueue and
   // MemoryErrorReporter satisfy Deps without needing Redis or a real reporter.
-  const deps = { env, db, logger, clock: systemClock, email: new ConsoleEmailProvider(logger), queue: new FakeQueue(), errorReporter: new MemoryErrorReporter() };
+  const deps = { env, db, logger, clock: systemClock, email: new ConsoleEmailProvider(logger), push: new ConsolePushProvider(logger), queue: new FakeQueue(), errorReporter: new MemoryErrorReporter() };
 
   const existing = await db.select({ id: users.id }).from(users).where(eq(users.email, "parakh@example.com")).limit(1);
   if (existing.length) {

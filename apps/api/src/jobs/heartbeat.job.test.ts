@@ -8,6 +8,7 @@ import { MemoryErrorReporter } from "../lib/error-reporter.js";
 import { createLogger } from "../lib/logger.js";
 import { FakeQueue } from "../lib/queue.js";
 import { MemoryEmailProvider } from "../services/email/email.provider.js";
+import { MemoryPushProvider } from "../services/push/push.provider.js";
 import type { Deps } from "../services/deps.js";
 import { runHeartbeat } from "./heartbeat.job.js";
 
@@ -26,7 +27,7 @@ const env = loadEnv({ NODE_ENV: "test", DATABASE_URL: TEST_DB_URL, LOG_LEVEL: "s
 const pool = createPool(env.DATABASE_URL, 5);
 const db = createDb(pool);
 const clock = new FakeClock();
-const deps: Deps = { env, db, logger: createLogger(env), clock, email: new MemoryEmailProvider(), queue: new FakeQueue(), errorReporter: new MemoryErrorReporter() };
+const deps: Deps = { env, db, logger: createLogger(env), clock, email: new MemoryEmailProvider(), push: new MemoryPushProvider(), queue: new FakeQueue(), errorReporter: new MemoryErrorReporter() };
 
 beforeEach(async () => {
   await db.delete(auditLogs);

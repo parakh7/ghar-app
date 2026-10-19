@@ -6,6 +6,7 @@ import type { ErrorReporter } from "../lib/error-reporter.js";
 import type { Logger } from "../lib/logger.js";
 import type { Queue } from "../lib/queue.js";
 import type { EmailProvider } from "./email/email.provider.js";
+import type { PushProvider } from "./push/push.provider.js";
 
 /** Everything a service needs, injected — no module-level singletons, so tests are isolated. */
 export type Deps = {
@@ -14,6 +15,7 @@ export type Deps = {
   logger: Logger;
   clock: Clock;
   email: EmailProvider;
+  push: PushProvider;
   queue: Queue;
   errorReporter: ErrorReporter;
   redis?: Redis;

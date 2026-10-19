@@ -8,6 +8,7 @@ import { MemoryErrorReporter } from "../src/lib/error-reporter.js";
 import { createLogger } from "../src/lib/logger.js";
 import { FakeQueue } from "../src/lib/queue.js";
 import { MemoryEmailProvider } from "../src/services/email/email.provider.js";
+import { MemoryPushProvider } from "../src/services/push/push.provider.js";
 import type { Deps } from "../src/services/deps.js";
 
 export const TEST_DB_URL = process.env.TEST_DATABASE_URL ?? "postgresql://app:app@localhost:5432/household_test";
@@ -25,6 +26,7 @@ export type TestContext = {
   deps: Deps;
   db: Database;
   email: MemoryEmailProvider;
+  push: MemoryPushProvider;
   clock: FakeClock;
   queue: FakeQueue;
   errorReporter: MemoryErrorReporter;
@@ -37,12 +39,13 @@ export function createTestContext(envOverrides: Partial<Record<keyof Env, string
   const pool = createPool(env.DATABASE_URL, 5);
   const db = createDb(pool);
   const email = new MemoryEmailProvider();
+  const push = new MemoryPushProvider();
   const clock = new FakeClock();
   const queue = new FakeQueue();
   const errorReporter = new MemoryErrorReporter();
-  const deps: Deps = { env, db, logger: createLogger(env), clock, email, queue, errorReporter };
+  const deps: Deps = { env, db, logger: createLogger(env), clock, email, push, queue, errorReporter };
   const app = createApp(deps);
-  return { deps, db, email, clock, queue, errorReporter, request: supertest(app), close: () => pool.end() };
+  return { deps, db, email, push, clock, queue, errorReporter, request: supertest(app), close: () => pool.end() };
 }
 
 export async function truncateAll(db: Database) {

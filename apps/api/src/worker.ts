@@ -10,6 +10,8 @@ import { createLogger } from "./lib/logger.js";
 import { BullMQQueue } from "./lib/queue.js";
 import { ConsoleEmailProvider, MemoryEmailProvider } from "./services/email/email.provider.js";
 import { ResendEmailProvider } from "./services/email/resend.provider.js";
+import { ConsolePushProvider, MemoryPushProvider } from "./services/push/push.provider.js";
+import { WebPushProvider } from "./services/push/web-push.provider.js";
 import type { Deps } from "./services/deps.js";
 
 const env = loadEnv();
@@ -25,6 +27,9 @@ const db = createDb(pool);
 const email = env.EMAIL_PROVIDER === "resend" ? new ResendEmailProvider(new Resend(env.RESEND_API_KEY), env.EMAIL_FROM, logger)
   : env.EMAIL_PROVIDER === "memory" ? new MemoryEmailProvider()
   : new ConsoleEmailProvider(logger);
+const push = env.PUSH_PROVIDER === "web-push" ? new WebPushProvider(env.VAPID_PUBLIC_KEY!, env.VAPID_PRIVATE_KEY!, env.VAPID_EMAIL, logger)
+  : env.PUSH_PROVIDER === "memory" ? new MemoryPushProvider()
+  : new ConsolePushProvider(logger);
 const errorReporter = new ConsoleErrorReporter(logger);
 
 // `{ consume: true }` is what starts job processing here: it makes BullMQQueue construct an
@@ -34,7 +39,7 @@ const errorReporter = new ConsoleErrorReporter(logger);
 // them, so it omits this flag.
 const queue = new BullMQQueue(env, logger, { consume: true });
 
-const deps: Deps = { env, db, logger, clock: systemClock, email, queue, errorReporter };
+const deps: Deps = { env, db, logger, clock: systemClock, email, push, queue, errorReporter };
 
 deps.queue.registerHandler("heartbeat", () => runHeartbeat(deps));
 deps.queue.registerHandler("evaluate-reminders", () => runEvaluateReminders(deps));
