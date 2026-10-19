@@ -109,7 +109,7 @@ describe("bill categories", () => {
     const res = await ctx.request.delete(`/api/households/${h.id}/bill-categories/${categoryId}`).set(csrf).set("cookie", owner.cookie);
     expect(res.status).toBe(200);
     const [deletedRow] = await ctx.db.select().from(billCategories).where(eq(billCategories.id, categoryId));
-    expect(deletedRow.deletedAt).not.toBeNull();
+    expect(deletedRow!.deletedAt).not.toBeNull();
   });
 
   it("moves a bill category up and down, swapping with its neighbor", async () => {

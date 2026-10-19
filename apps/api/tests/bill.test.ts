@@ -330,7 +330,7 @@ describe("bill definitions", () => {
     const id = createRes.body.data.id;
     await ctx.request.patch(`/api/households/${h.id}/bills/${id}`).set(csrf).set("cookie", owner.cookie).send({ provider: "BESCOM" });
     const [log] = await ctx.db.select().from(auditLogs).where(and(eq(auditLogs.householdId, h.id), eq(auditLogs.action, "bill.updated")));
-    expect(log.newValue).toMatchObject({ provider: "BESCOM" });
+    expect(log!.newValue).toMatchObject({ provider: "BESCOM" });
   });
 
   it("PATCH silently strips an unrecognized status field and leaves the bill's actual status untouched", async () => {
